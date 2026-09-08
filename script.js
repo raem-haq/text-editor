@@ -1,13 +1,16 @@
 const textBox = document.querySelector(".text-box");
+var hasWritten = false;
 
 textBox.addEventListener("keypress", (event) => {
-    if (textBox.textContent === "Edit Text") {
+    if (!hasWritten) {
         textBox.textContent = "";
+        hasWritten = true;
     }
-    textBox.textContent = textBox.textContent  + event.key;
+    if (event.key === "Enter") {
+        textBox.textContent = textBox.textContent + "\n";
+        event.preventDefault();
+    } else {
+        textBox.textContent = textBox.textContent + event.key;
+    }
 });
 
-const debugButton = document.querySelector(".debug");
-debugButton.addEventListener("keypress", (event) => {
-    console.log(`key=${event.key},code=${event.code}`);
-});
