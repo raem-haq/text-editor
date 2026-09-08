@@ -23,13 +23,12 @@ function keyHandler(event){
             newLine.classList.add("line-"+currentLineNo);
             newLine.addEventListener("keypress", keyHandler);
             newLine.setAttribute("tabindex", "0");
-            newLine.textContent = "I'm a new line";
-            textBox.appendChild(newLine);
-            console.log("New LINE!")            
+            textBox.appendChild(newLine);       
 
             cursorIndex = 0;
             allLines.push(newLine);
             currentLine = newLine;
+            break;
 
         default:
             currentLine.textContent = currentLine.textContent + event.key;
