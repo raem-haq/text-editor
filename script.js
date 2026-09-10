@@ -1,5 +1,5 @@
-const textBox = document.querySelector(".text-box");
-var currentLine = document.querySelector(".line-1");
+const textBox = document.querySelector("#text-box");
+var currentLine = document.querySelector("#line-1");
 
 
 var allLines = [currentLine];
@@ -31,7 +31,7 @@ function keyHandler(event){
             currentLineNo++;
 
             var newLine = document.createElement("div");
-            newLine.classList.add("line-"+currentLineNo);
+            newLine.setAttribute("id", "line-"+currentLineNo);
             newLine.addEventListener("keypress", keyHandler);
             newLine.setAttribute("tabindex", "0");
             textBox.appendChild(newLine);       
@@ -39,7 +39,7 @@ function keyHandler(event){
             allLines.push(newLine);
             currentLine = newLine;
             break;
-        case Backspace:
+        case "Backspace":
             if (cursorIndex > 0) {
                 currentLine.textContent = removeAt(currentLine.textContent, cursorIndex - 1);
                 cursorIndex--;
@@ -49,6 +49,7 @@ function keyHandler(event){
                 allLines = removeAt(allLines, currentLineNo);
                 cursorIndex = newLine.textContent.length - 1;
                 newLine.textContent += oldLineText;
+                currentLine.remove();
                 currentLine = newLine;
                 currentLineNo--;
             }
@@ -56,7 +57,7 @@ function keyHandler(event){
         default:
             currentLine.textContent = currentLine.textContent + event.key;
             cursorIndex++;
-    }debug
+    }
 }
 
-currentLine.addEventListener("keypress", keyHandler)
+currentLine.addEventListener("keydown", keyHandler)
