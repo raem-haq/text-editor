@@ -4,7 +4,7 @@ var currentLineObj = document.querySelector("#line-1");
 var allLines = [currentLineObj];
 var hasWritten = false;
 var currentLineNo = 0; // zero-indexed
-var cursorIndex = 0;
+var cursorIndex = 0; // for a line of n chars, the cursor can be in n + 1 positions
 var verticalMovement = false;
 var savedCursorIndex = cursorIndex;
 var currentLineText = currentLineObj.textContent;
@@ -23,6 +23,7 @@ function removeCursor(lineObj) {
 
 
 function addCursor(line, i) {
+    removeCursor(line)
     const textNode = line.firstChild || document.createTextNode("");
     if (!line.firstChild) {
         line.appendChild(textNode);
