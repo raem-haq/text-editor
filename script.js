@@ -4,7 +4,7 @@ var currentLineObj = document.querySelector("#line-1");
 var allLines = [currentLineObj];
 var hasWritten = false;
 var currentLineNo = 0; // zero-indexed
-var cursorIndex = 0;
+var cursorIndex = 1;
 var verticalMovement = false;
 var savedCursorIndex = cursorIndex;
 var currentLineText = currentLineObj.textContent;
@@ -18,6 +18,7 @@ function removeCursor(lineObj){
     const cursor = lineObj.querySelector("span.cursor");
     cursor.remove();
 }
+
 
 function addCursor(line, i){
     const textNode = line.firstChild;
@@ -55,16 +56,23 @@ function keyHandler(event){
     switch (event.key) {
         case "Enter": 
             currentLineNo++;
+            
+            removeCursor(currentLineObj);
+            newLineText = currentLineText.slice(cursorIndex);
+            currentLineObj.textContent = currentLineText.slice(0, cursorIndex);
 
             var newLine = document.createElement("div");
-            newLine.setAttribute("id", "line-"+currentLineNo);
-            newLine.addEventListener("keypress", keyHandler);
+            newLine.addEventListener("keydown", keyHandler);
             newLine.setAttribute("tabindex", "0");
-            textBox.appendChild(newLine);       
+            newLine.textContent = newLineText;
+                        
+            const nextSibling = currentLineObj ? currentLineObj.nextSibling : textBox.firstChild;
+            textBox.insertBefore(newLine, nextSibling);
+
             cursorIndex = 0;
-            allLines.push(newLine);
-            removeCursor(currentLineObj);
+            allLines.splice(currentLineNo, 0, newLine);
             currentLineObj = newLine;
+            currentLineText = newLineText;
             break;
         case "Backspace":
             if (cursorIndex > 0) {
@@ -78,6 +86,7 @@ function keyHandler(event){
                 newLine.textContent += oldLineText;
                 currentLineObj.remove();
                 currentLineObj = newLine;
+                currentLineText = newLine.textContent;
                 currentLineNo--;
             }
             break;
@@ -87,6 +96,7 @@ function keyHandler(event){
             } else if (currentLineNo > 0) {
                 removeCursor(currentLineObj);
                 currentLineObj = allLines[currentLineNo-1];
+                currentLineText = currentLineObj.textContent;
                 cursorIndex = newLine.textContent.length - 1;
                 currentLineNo --;
             }
@@ -98,6 +108,7 @@ function keyHandler(event){
             } else if (currentLineNo < allLines.length - 1) {
                 removeCursor(currentLineObj);
                 currentLineObj = allLines[currentLineNo+1];
+                currentLineText = currentLineObj.textContent;
                 cursorIndex = 0;
                 currentLineNo ++;
             }
@@ -106,6 +117,7 @@ function keyHandler(event){
             if (currentLineNo > 0){
                 removeCursor(currentLineObj);
                 currentLineObj = allLines[currentLineNo-1];
+                currentLineText = currentLineObj.textContent;
                 currentLineNo--;
                 if (!verticalMovement) {
                     verticalMovement = true;
@@ -120,6 +132,7 @@ function keyHandler(event){
             if (currentLineNo < allLines.length - 1) {
                 removeCursor(currentLineObj);
                 currentLineObj = allLines[currentLineNo+1];
+                currentLineText = currentLineObj.textContent;
                 currentLineNo++;
                 if (!verticalMovement) {
                     verticalMovement = true;
@@ -131,7 +144,7 @@ function keyHandler(event){
             }
             break;
         default:
-            currentLineText = currentLineText + event.key;
+            currentLineText = currentLineText.slice(0, cursorIndex) + event.key + currentLineText.slice(cursorIndex);
             cursorIndex++;
     }
     
