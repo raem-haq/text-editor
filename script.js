@@ -1,12 +1,23 @@
 const textBox = document.querySelector("#text-box");
-var currentLine = document.querySelector("#line-1");
+var currentLineObj = document.querySelector("#line-1");
 
-var allLines = [currentLine];
+var allLines = [currentLineObj];
 var hasWritten = false;
 var currentLineNo = 0; // zero-indexed
 var cursorIndex = 0;
 var verticalMovement = false;
 var savedCursorIndex = cursorIndex;
+var currentLineText = currentLineObj.textContent;
+
+function render(lineObj, cursorI, text){
+    lineObj.textContent = text;
+    addCursor(lineObj, cursorI);    
+}
+
+function removeCursor(lineObj){
+    const cursor = lineObj.querySelector("span.cursor");
+    cursor.remove();
+}
 
 function addCursor(line, i){
     const textNode = line.firstChild;
@@ -15,8 +26,8 @@ function addCursor(line, i){
     const cursor = document.createElement('span');
     cursor.className = 'cursor';
 
-    line.insertBefore(cursor, afterNode)
-    return cursor
+    line.insertBefore(cursor, afterNode);
+    return cursor;
 }
 
 function removeAt(value, i) {   
@@ -32,10 +43,12 @@ function removeAt(value, i) {
 }
 
 function keyHandler(event){
-    if (!hasWritten) {
-        currentLine.textContent = "";
+    if (!hasWritten && event.key.length === 1) {
+        currentLineText = "";
         hasWritten = true;
-        const cursor = addCursor(currentLine, cursorIndex);
+    }
+    if (!hasWritten){
+        return;
     }
     event.preventDefault();
 
@@ -50,76 +63,79 @@ function keyHandler(event){
             textBox.appendChild(newLine);       
             cursorIndex = 0;
             allLines.push(newLine);
-            currentLine = newLine;
+            removeCursor(currentLineObj);
+            currentLineObj = newLine;
             break;
         case "Backspace":
             if (cursorIndex > 0) {
-                currentLine.textContent = removeAt(currentLine.textContent, cursorIndex - 1);
+                currentLineText = removeAt(currentLineText, cursorIndex - 1);
                 cursorIndex--;
             } else if (currentLineNo > 0) {
-                oldLineText = currentLine.textContent;
+                oldLineText = currentLineText;
                 newLine = allLines[currentLineNo-1];
                 allLines = removeAt(allLines, currentLineNo);
                 cursorIndex = newLine.textContent.length - 1;
                 newLine.textContent += oldLineText;
-                currentLine.remove();
-                currentLine = newLine;
+                currentLineObj.remove();
+                currentLineObj = newLine;
                 currentLineNo--;
             }
             break;
         case "ArrowLeft":
             if (cursorIndex > 0){
                 cursorIndex --;
-            } else {
-                currentLine = allLines[currentLineNo-1];
+            } else if (currentLineNo > 0) {
+                removeCursor(currentLineObj);
+                currentLineObj = allLines[currentLineNo-1];
                 cursorIndex = newLine.textContent.length - 1;
                 currentLineNo --;
             }
             break;
         
         case "ArrowRight":
-            if (cursorIndex < currentLine.length - 1){
+            if (cursorIndex < currentLineText.length){
                 cursorIndex ++;
             } else if (currentLineNo < allLines.length - 1) {
-                currentLine = allLines[currentLineNo+1];
+                removeCursor(currentLineObj);
+                currentLineObj = allLines[currentLineNo+1];
                 cursorIndex = 0;
                 currentLineNo ++;
             }
             break;
         case "ArrowUp":
             if (currentLineNo > 0){
-                currentLine = allLines[currentLineNo-1];
+                removeCursor(currentLineObj);
+                currentLineObj = allLines[currentLineNo-1];
                 currentLineNo--;
-                if (verticalMovement){
-                    cursorIndex = Math.min(savedCursorIndex, currentLine.length - 1);
-                } else {
+                if (!verticalMovement) {
                     verticalMovement = true;
                     savedCursorIndex = cursorIndex;
                 }
+                cursorIndex = Math.min(savedCursorIndex, currentLineObj.length - 1);
             } else {
                 cursorIndex = 0;
             }
             break;
         case "ArrowDown":
             if (currentLineNo < allLines.length - 1) {
-                currentLine = allLines[currentLineNo+1];
+                removeCursor(currentLineObj);
+                currentLineObj = allLines[currentLineNo+1];
                 currentLineNo++;
                 if (!verticalMovement) {
                     verticalMovement = true;
                     savedCursorIndex = cursorIndex;
                 }
-                cursorIndex = Math.min(savedCursorIndex, currentLine.length - 1);
+                cursorIndex = Math.min(savedCursorIndex, currentLineObj.length - 1);
             } else {
-                cursorIndex = currentLine.length - 1
+                cursorIndex = currentLineObj.length - 1
             }
             break;
         default:
-            currentLine.textContent = currentLine.textContent + event.key;
+            currentLineText = currentLineText + event.key;
             cursorIndex++;
     }
     
-    cursor.remove()
-    const cursor = addCursor(currentLine, cursorIndex);
+    render(currentLineObj, cursorIndex, currentLineText)
 }
 
-currentLine.addEventListener("keydown", keyHandler)
+currentLineObj.addEventListener("keydown", keyHandler)
