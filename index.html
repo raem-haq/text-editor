@@ -5,6 +5,22 @@
         <meta charset="UTF-8">
         <title>Text Editor</title>
         <script src="script.js" defer></script>
+
+        <style>
+            .cursor {
+                display: inline-block;
+                width: 2px;
+                height: 1.2em;
+                background-color: currentColor;
+                vertical-align: text-bottom;
+                animation: blink 1s step-end infinite;
+            }
+
+            @keyframes blink {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0; }
+            }
+        </style>
     </head>
 
     <body>

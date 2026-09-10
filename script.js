@@ -1,10 +1,5 @@
 const textBox = document.querySelector("#text-box");
 var currentLine = document.querySelector("#line-1");
-/*
-const cursor = document.createElement('span');
-cursor.className = 'cursor';
-currentLine.appendChild(cursor);
-*/
 
 var allLines = [currentLine];
 var hasWritten = false;
@@ -12,6 +7,17 @@ var currentLineNo = 0; // zero-indexed
 var cursorIndex = 0;
 var verticalMovement = false;
 var savedCursorIndex = cursorIndex;
+
+function addCursor(line, i){
+    const textNode = line.firstChild;
+    const afterNode = textNode.splitText(i);
+    
+    const cursor = document.createElement('span');
+    cursor.className = 'cursor';
+
+    line.insertBefore(cursor, afterNode)
+    return cursor
+}
 
 function removeAt(value, i) {   
     if (i < 0 || i >= value.length) {
@@ -29,6 +35,7 @@ function keyHandler(event){
     if (!hasWritten) {
         currentLine.textContent = "";
         hasWritten = true;
+        const cursor = addCursor(currentLine, cursorIndex);
     }
     event.preventDefault();
 
@@ -82,6 +89,7 @@ function keyHandler(event){
         case "ArrowUp":
             if (currentLineNo > 0){
                 currentLine = allLines[currentLineNo-1];
+                currentLineNo--;
                 if (verticalMovement){
                     cursorIndex = Math.min(savedCursorIndex, currentLine.length - 1);
                 } else {
@@ -93,8 +101,9 @@ function keyHandler(event){
             }
             break;
         case "ArrowDown":
-            if (currentLine < allLines.length - 1) {
+            if (currentLineNo < allLines.length - 1) {
                 currentLine = allLines[currentLineNo+1];
+                currentLineNo++;
                 if (!verticalMovement) {
                     verticalMovement = true;
                     savedCursorIndex = cursorIndex;
@@ -108,6 +117,9 @@ function keyHandler(event){
             currentLine.textContent = currentLine.textContent + event.key;
             cursorIndex++;
     }
+    
+    cursor.remove()
+    const cursor = addCursor(currentLine, cursorIndex);
 }
 
 currentLine.addEventListener("keydown", keyHandler)
