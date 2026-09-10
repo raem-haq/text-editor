@@ -4,7 +4,7 @@ var currentLineObj = document.querySelector("#line-1");
 var allLines = [currentLineObj];
 var hasWritten = false;
 var currentLineNo = 0; // zero-indexed
-var cursorIndex = 1;
+var cursorIndex = 0;
 var verticalMovement = false;
 var savedCursorIndex = cursorIndex;
 var currentLineText = currentLineObj.textContent;
@@ -14,18 +14,24 @@ function render(lineObj, cursorI, text){
     addCursor(lineObj, cursorI);    
 }
 
-function removeCursor(lineObj){
+function removeCursor(lineObj) {
     const cursor = lineObj.querySelector("span.cursor");
-    cursor.remove();
+    if (cursor) {
+        cursor.remove();
+    }
 }
 
 
-function addCursor(line, i){
-    const textNode = line.firstChild;
-    const afterNode = textNode.splitText(i);
-    
-    const cursor = document.createElement('span');
-    cursor.className = 'cursor';
+function addCursor(line, i) {
+    const textNode = line.firstChild || document.createTextNode("");
+    if (!line.firstChild) {
+        line.appendChild(textNode);
+    }
+
+    const afterNode = textNode.splitText(i+1);
+
+    const cursor = document.createElement("span");
+    cursor.className = "cursor";
 
     line.insertBefore(cursor, afterNode);
     return cursor;
@@ -44,18 +50,22 @@ function removeAt(value, i) {
 }
 
 function keyHandler(event){
-    if (!hasWritten && event.key.length === 1) {
+    if (!hasWritten && (event.key.length === 1 || event.key === "Enter")) {
         currentLineText = "";
         hasWritten = true;
+        cursorIndex = 0;
     }
     if (!hasWritten){
         return;
     }
     event.preventDefault();
 
+    if (verticalMovement && event.key !== "ArrowUp" && event.key !== "ArrowDown"){
+        verticalMovement = false;
+    }
+
     switch (event.key) {
         case "Enter": 
-            currentLineNo++;
             
             removeCursor(currentLineObj);
             newLineText = currentLineText.slice(cursorIndex);
@@ -66,11 +76,12 @@ function keyHandler(event){
             newLine.setAttribute("tabindex", "0");
             newLine.textContent = newLineText;
                         
-            const nextSibling = currentLineObj ? currentLineObj.nextSibling : textBox.firstChild;
+            const nextSibling = currentLineObj.nextSibling ? currentLineObj.nextSibling : textBox.firstChild;
             textBox.insertBefore(newLine, nextSibling);
 
             cursorIndex = 0;
             allLines.splice(currentLineNo, 0, newLine);
+            currentLineNo++;
             currentLineObj = newLine;
             currentLineText = newLineText;
             break;
@@ -80,7 +91,7 @@ function keyHandler(event){
                 cursorIndex--;
             } else if (currentLineNo > 0) {
                 oldLineText = currentLineText;
-                newLine = allLines[currentLineNo-1];
+                const newLine = allLines[currentLineNo-1];
                 allLines = removeAt(allLines, currentLineNo);
                 cursorIndex = newLine.textContent.length - 1;
                 newLine.textContent += oldLineText;
@@ -97,7 +108,7 @@ function keyHandler(event){
                 removeCursor(currentLineObj);
                 currentLineObj = allLines[currentLineNo-1];
                 currentLineText = currentLineObj.textContent;
-                cursorIndex = newLine.textContent.length - 1;
+                cursorIndex = currentLineObj.textContent.length - 1;
                 currentLineNo --;
             }
             break;
@@ -123,7 +134,7 @@ function keyHandler(event){
                     verticalMovement = true;
                     savedCursorIndex = cursorIndex;
                 }
-                cursorIndex = Math.min(savedCursorIndex, currentLineObj.length - 1);
+                cursorIndex = Math.min(savedCursorIndex, currentLineText.length - 1);
             } else {
                 cursorIndex = 0;
             }
@@ -138,14 +149,16 @@ function keyHandler(event){
                     verticalMovement = true;
                     savedCursorIndex = cursorIndex;
                 }
-                cursorIndex = Math.min(savedCursorIndex, currentLineObj.length - 1);
+                cursorIndex = Math.min(savedCursorIndex, currentLineText.length - 1);
             } else {
-                cursorIndex = currentLineObj.length - 1
+                cursorIndex = currentLineText.length-1;
             }
             break;
         default:
-            currentLineText = currentLineText.slice(0, cursorIndex) + event.key + currentLineText.slice(cursorIndex);
-            cursorIndex++;
+            if (event.key.length == 1) { 
+                currentLineText = currentLineText.slice(0, cursorIndex) + event.key + currentLineText.slice(cursorIndex);
+                cursorIndex++;
+            }
     }
     
     render(currentLineObj, cursorIndex, currentLineText)
