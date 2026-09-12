@@ -100,7 +100,7 @@ function keyHandler(event : KeyboardEvent){
             currentLineObj.textContent = currentLineText.slice(0, cursorIndex);
 
             let newLine : HTMLDivElement = document.createElement("div");
-            newLine.addEventListener("keydown", keyHandler);
+            //newLine.addEventListener("keydown", keyHandler);
             newLine.setAttribute("tabindex", "0");
             newLine.textContent = newLineText;
 
@@ -204,4 +204,4 @@ function keyHandler(event : KeyboardEvent){
     render(currentLineObj, cursorIndex, currentLineText)
 }
 
-currentLineObj.addEventListener("keydown", keyHandler)
+textBox.addEventListener("keydown", keyHandler)
