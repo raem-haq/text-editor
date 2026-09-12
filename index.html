@@ -4,9 +4,14 @@
     <head >
         <meta charset="UTF-8">
         <title>Text Editor</title>
-        <script src="script.js" defer></script>
+        <script type="module" src="build/script.js" defer></script>
 
         <style>
+
+            #text-box > div {
+                white-space: pre-wrap;
+            }
+
             .cursor {
                 display: inline-block;
                 width: 2px;
