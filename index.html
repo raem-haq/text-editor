@@ -7,6 +7,10 @@
         <script type="module" src="build/script.js" defer></script>
 
         <style>
+            #text-box {
+                display: flex;
+                flex-direction: column;
+            }
 
             #text-box > div {
                 white-space: pre-wrap;
@@ -29,8 +33,8 @@
     </head>
 
     <body>
-        <div id="text-box">
-            <div id="line-1" tabindex="0">Edit Text</div>
+        <div id="text-box" tabindex="0">
+            <div id="line-1">Edit Text</div>
         </div>
     </body>
 </html>

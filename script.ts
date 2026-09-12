@@ -46,8 +46,6 @@ function addCursor(line : HTMLDivElement, cursorPos : number) {
         line.appendChild(textNode);
     }
 
-
-
     // cursorPos is the number of characters before the cursor.
     // splitText receives that same offset directly and returns the text node
     // that begins at the cursor boundary, so the surrounding cursor span can
@@ -75,6 +73,7 @@ function removeAt(value : string | unknown[], i : number) : (string | unknown[])
 
 function keyHandler(event : KeyboardEvent){
     console.log(event.key);
+    console.log(currentLineNo, cursorIndex);
 
 
     if (!hasWritten && (event.key.length === 1 || event.key === "Enter" || event.key === "SpaceBar")) {
