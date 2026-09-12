@@ -1,18 +1,26 @@
+export {}
+
 const textBox : HTMLDivElement= document.querySelector<HTMLDivElement>("#text-box")!;
 let currentLineObj : HTMLDivElement = document.querySelector<HTMLDivElement>("#line-1")!;
 
 let allLines : HTMLDivElement[] = [currentLineObj];
 let hasWritten : boolean = false;
 let currentLineNo : number = 0; // zero-indexed
-let verticalMovement : boolean = false;
-let savedCursorIndex : number = cursorIndex;
-let currentLineText : string = currentLineObj.textContent;
+let currentLineText : string = currentLineObj.textContent!;
 
-// for a line of n chars, the cursor can be in n + 1 positions
-// cursorIndex == currentLineText.slice(0, cursorIndex).length + 1
+// For a line of n chars, the cursor can be in n + 1 positions:
+// the valid boundaries are 0..n, inclusive.
+// cursorIndex is the number of characters before the cursor, so
+// cursorIndex ==== currentLineText.slice(0, cursorIndex).length.
 let cursorIndex : number = 0; 
 
 
+let savedCursorIndex : number = cursorIndex;
+let verticalMovement : boolean = false;
+
+function insertInString(s : string, i : number, v : string){
+    return s.slice(0, i) + v + s.slice(i);
+}
 
 function render(lineObj : HTMLDivElement, cursorI : number, text: string){
     lineObj.textContent = text;
@@ -34,8 +42,17 @@ function addCursor(line : HTMLDivElement, cursorPos : number) {
         line.firstChild instanceof Text
             ? line.firstChild
             : document.createTextNode("");
+    if (!(line.firstChild instanceof Text)) {
+        line.appendChild(textNode);
+    }
 
-    const afterNode : Text = textNode.splitText(cursorPos+1);
+
+
+    // cursorPos is the number of characters before the cursor.
+    // splitText receives that same offset directly and returns the text node
+    // that begins at the cursor boundary, so the surrounding cursor span can
+    // be inserted before it.    const afterNode : Text = textNode.splitText(cursorPos);
+    const afterNode = textNode.splitText(cursorPos);
 
     const cursor = document.createElement("span");
     cursor.className = "cursor";
@@ -57,24 +74,28 @@ function removeAt(value : string | unknown[], i : number) : (string | unknown[])
 }
 
 function keyHandler(event : KeyboardEvent){
-    if (!hasWritten && (event.key.length === 1 || event.key === "Enter")) {
+    console.log(event.key);
+
+
+    if (!hasWritten && (event.key.length === 1 || event.key === "Enter" || event.key === "SpaceBar")) {
         currentLineText = "";
         hasWritten = true;
         cursorIndex = 0;
     }
-    if (!hasWritten){
-        return;
-    }
+    if (!hasWritten) return;
+
     event.preventDefault();
 
     if (verticalMovement && event.key !== "ArrowUp" && event.key !== "ArrowDown"){
         verticalMovement = false;
     }
+    
 
     switch (event.key) {
         case "Enter": 
             
             removeCursor(currentLineObj);
+            //slice works even when cursorIndex is out of bounds
             let newLineText : string = currentLineText.slice(cursorIndex);
             currentLineObj.textContent = currentLineText.slice(0, cursorIndex);
 
@@ -82,11 +103,11 @@ function keyHandler(event : KeyboardEvent){
             newLine.addEventListener("keydown", keyHandler);
             newLine.setAttribute("tabindex", "0");
             newLine.textContent = newLineText;
-            
+
             textBox.insertBefore(newLine, currentLineObj.nextElementSibling);
 
             cursorIndex = 0;
-            allLines.splice(currentLineNo, 0, newLine);
+            allLines.splice(currentLineNo + 1, 0, newLine);
             currentLineNo++;
             currentLineObj = newLine;
             currentLineText = newLineText;
@@ -97,13 +118,13 @@ function keyHandler(event : KeyboardEvent){
                 cursorIndex--;
             } else if (currentLineNo > 0) {
                 let oldLineText : string = currentLineText;
-                const newLine : HTMLDivElement = allLines[currentLineNo-1]!;
+                const prevLine : HTMLDivElement = allLines[currentLineNo-1]!;
                 allLines = removeAt(allLines, currentLineNo) as HTMLDivElement[];
-                cursorIndex = newLine.textContent.length;
-                newLine.textContent += oldLineText;
+                cursorIndex = prevLine.textContent!.length;
+                prevLine.textContent += oldLineText;
                 currentLineObj.remove();
-                currentLineObj = newLine;
-                currentLineText = newLine.textContent;
+                currentLineObj = prevLine;
+                currentLineText = prevLine.textContent!;
                 currentLineNo--;
             }
             break;
@@ -112,10 +133,10 @@ function keyHandler(event : KeyboardEvent){
                 cursorIndex --;
             } else if (currentLineNo > 0) {
                 removeCursor(currentLineObj);
-                currentLineObj = allLines[currentLineNo-1];
-                currentLineText = currentLineObj.textContent;
-                cursorIndex = currentLineObj.textContent.length - 1;
                 currentLineNo --;
+                currentLineObj = allLines[currentLineNo] as HTMLDivElement;
+                currentLineText = currentLineObj.textContent!;
+                cursorIndex = currentLineObj.textContent!.length;
             }
             break;
         
@@ -124,8 +145,8 @@ function keyHandler(event : KeyboardEvent){
                 cursorIndex ++;
             } else if (currentLineNo < allLines.length - 1) {
                 removeCursor(currentLineObj);
-                currentLineObj = allLines[currentLineNo+1];
-                currentLineText = currentLineObj.textContent;
+                currentLineObj = allLines[currentLineNo+1] as HTMLDivElement;
+                currentLineText = currentLineObj.textContent!;
                 cursorIndex = 0;
                 currentLineNo ++;
             }
@@ -133,14 +154,14 @@ function keyHandler(event : KeyboardEvent){
         case "ArrowUp":
             if (currentLineNo > 0){
                 removeCursor(currentLineObj);
-                currentLineObj = allLines[currentLineNo-1];
-                currentLineText = currentLineObj.textContent;
+                currentLineObj = allLines[currentLineNo-1] as HTMLDivElement;
+                currentLineText = currentLineObj.textContent!;
                 currentLineNo--;
                 if (!verticalMovement) {
                     verticalMovement = true;
                     savedCursorIndex = cursorIndex;
                 }
-                cursorIndex = Math.min(savedCursorIndex, currentLineText.length - 1);
+                cursorIndex = Math.min(savedCursorIndex, currentLineText.length);
             } else {
                 cursorIndex = 0;
             }
@@ -148,21 +169,34 @@ function keyHandler(event : KeyboardEvent){
         case "ArrowDown":
             if (currentLineNo < allLines.length - 1) {
                 removeCursor(currentLineObj);
-                currentLineObj = allLines[currentLineNo+1];
-                currentLineText = currentLineObj.textContent;
+                currentLineObj = allLines[currentLineNo+1] as HTMLDivElement;
+                currentLineText = currentLineObj.textContent!;
                 currentLineNo++;
                 if (!verticalMovement) {
                     verticalMovement = true;
                     savedCursorIndex = cursorIndex;
                 }
-                cursorIndex = Math.min(savedCursorIndex, currentLineText.length - 1);
+                cursorIndex = Math.min(savedCursorIndex, currentLineText.length);
             } else {
-                cursorIndex = currentLineText.length-1;
+                cursorIndex = currentLineText.length;
             }
             break;
+        case "Tab":
+            let noOfSpaces : number = 4 - cursorIndex % 4;
+            let s : string = "";
+            for (let i = 0; i < noOfSpaces; i++){
+                s += " ";
+            }
+            currentLineText = insertInString(currentLineText, cursorIndex, s);
+            cursorIndex += noOfSpaces;
+            break;
+        case "SpaceBar": // for older browsers
+            currentLineText = currentLineText.slice(0, cursorIndex) + " " + currentLineText.slice(cursorIndex);
+            cursorIndex++;
+            break;
         default:
-            if (event.key.length == 1) { 
-                currentLineText = currentLineText.slice(0, cursorIndex) + event.key + currentLineText.slice(cursorIndex);
+            if (event.key.length === 1) { 
+                currentLineText = insertInString(currentLineText, cursorIndex, event.key);
                 cursorIndex++;
             }
     }
