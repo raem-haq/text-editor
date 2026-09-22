@@ -10,49 +10,46 @@ type Position = {
 type Selection = {
     anchor: Position;
     active: Position;
-};
+} | null;
 
+/*
 type TextEditorState = {
     lines: string[];
     cursor: Position;
-    selecting : boolean;
     selection: Selection;
 };
-
+*/
 
 let hasWritten : boolean = false;
 
-let cursor : Position = {
-    line: 0,
-    column: 0   
-};
-
+let lines : string[] = [];
+let cursor : Position = {line: 0, column: 0};
+let selection : Selection;
 
 let savedVerticalCursorIndex : number;
 let verticalMovement : boolean = false;
+let shiftHold : boolean = false;
 
-let editorState : TextEditorState = {
-    lines : [],
-    cursor: cursor,
-    selecting : false,
-    selection: {anchor: cursor, active: cursor},
-}
 
 function insertInString(s : string, i : number, v : string) : string {
     return s.slice(0, i) + v + s.slice(i);
 }
 
-// Must work even when line has no cursor
-function removeCursor(lineObj : HTMLDivElement) {
-    const cursor = lineObj.querySelector("span.cursor");
-    if (cursor) {
-        cursor.remove();
+function renderDOM(){
+    textBox.replaceChildren();
+    let lineElements : HTMLDivElement[] = [];
+    for (const [i, line] of lines.entries()){
+        const div = document.createElement("div");
+        div.textContent = line;
+        textBox.appendChild(div);
+        lineElements.push(div)
     }
+    addCursor(lineElements[cursor.line]!, cursor.column);
+    addSelection(lineElements, selection);
 }
 
 
 function addCursor(line : HTMLDivElement, cursorPos : number) {
-    removeCursor(line);
     const textNode =
         line.firstChild instanceof Text
             ? line.firstChild
@@ -74,34 +71,35 @@ function addCursor(line : HTMLDivElement, cursorPos : number) {
     return cursor;
 }
 
-function addSelectionToLine(lineNo : number, startI: number, endI? :number) {
+function addSelectionToLine(lineElem : HTMLDivElement, startI: number, endI? :number) {
     const highlighted : HTMLSpanElement = document.createElement("span");
     highlighted.className = "selection";
-    const lineText : string = lineElements[lineNo]!.textContent;
+    const lineText : string = lineElem.textContent;
     const end : number = endI ?? lineText.length;
     // remember cursor index is after char
     // and slice does not include end index
     const inDiv = lineText.slice(startI, end); 
     const inSpan = lineText.slice(end);
-    lineElements[lineNo]!.textContent = inDiv;
+    lineElem!.textContent = inDiv;
     highlighted.textContent = inSpan;
-    lineElements[lineNo]!.appendChild(highlighted);
-    selectedLineNos.push(lineNo);
+    lineElem!.appendChild(highlighted);
 }
 
-function addSelection(startL : number, startI: number, endL : number, endI :number){
-    if (startL > endL || (startL == endL && startI > endL)){
-        [startL, endL] = [endL, startL];
-        [startI, endI] = [endI, startI];
+function addSelection(lineElems : HTMLDivElement[], selection : Selection){
+    if (selection === null) return;
+    let {anchor: start, active: end} = selection;
+
+    if (start.line > end.line || (start.line == end.line && start.column > end.column)){
+        [start, end] = [end, start];
     }
-    if (startL === endL){
-        addSelectionToLine(startL, startI, endI);
+    if (start.line == end.line){
+        addSelectionToLine(lineElems[start.line]!, start.column, end.column);
     } else {
-        addSelectionToLine(startL, startI);
-        for (let i = startL + 1; i < endL; i++){
-            addSelectionToLine(i,0);
+        addSelectionToLine(lineElems[start.line]!, start.column);
+        for (let i = start.line + 1; i < end.line; i++){
+            addSelectionToLine(lineElems[i]!,0);
         }
-        addSelectionToLine(endL, 0, endI);
+        addSelectionToLine(lineElems[end.line]!, 0, end.column);
     }
 }
 
@@ -139,111 +137,95 @@ function keyHandler(event : KeyboardEvent) {
     if (event.shiftKey){
         if (!shiftHold){
             shiftHold = true;
-            editorState.selection 
+            selection = {anchor: cursor, active : cursor};
         }
     } else if (event.key !== "Shift") {
         shiftHold = false;
-        removeSelections(); // for now - will be more advanced in future
     }
-
-    removeCursor(lineElements[currentLineNo]!);
 
     switch (event.key) {
         case "Enter": {
-            const currentLine = allLines[currentLineNo]!;
-            const newLineText = currentLine.slice(cursorIndex);
-            allLines[currentLineNo] = currentLine.slice(0, cursorIndex);
+            const currentLine = lines[cursor.line]!;
+            const newLineText = currentLine.slice(cursor.column);
+            lines[cursor.line] = currentLine.slice(0, cursor.column);
 
-            const newLine = document.createElement("div");
-            newLine.setAttribute("tabindex", "0");
+            lines.splice(cursor.line + 1, 0, newLineText);
 
-            textBox.insertBefore(newLine, lineElements[currentLineNo]!.nextElementSibling);
-            allLines.splice(currentLineNo + 1, 0, newLineText);
-            lineElements.splice(currentLineNo + 1, 0, newLine);
-
-            currentLineNo++;
-            cursorIndex = 0;
+            cursor.line += 1;
+            cursor.column = 0;
             
             break;
         }
         case "Backspace":
-            if (cursorIndex > 0) {
-                allLines[currentLineNo] = removeAt(allLines[currentLineNo]!, cursorIndex - 1);
-                cursorIndex--;
-            } else if (currentLineNo > 0) {
-                const previousLineNo = currentLineNo - 1;
-                cursorIndex = allLines[previousLineNo]!.length;
-                allLines[previousLineNo] += allLines[currentLineNo]!;
-                allLines.splice(currentLineNo, 1);
-                lineElements[currentLineNo]!.remove();
-                lineElements.splice(currentLineNo, 1);
-                currentLineNo = previousLineNo;
+            if (cursor.line > 0) {
+                lines[cursor.line] = removeAt(lines[cursor.line]!, cursor.column - 1);
+                cursor.column--;
+            } else if (cursor.line > 0) {
+                const previousLineNo = cursor.line - 1;
+                cursor.column = lines[previousLineNo]!.length;
+                lines[previousLineNo] += lines[cursor.line]!;
+                lines.splice(cursor.line, 1);
+                cursor.line = previousLineNo;
             }
             break;
         case "ArrowLeft":
-            if (cursorIndex > 0) {
-                cursorIndex--;
-            } else if (currentLineNo > 0) {
-                currentLineNo--;
-                cursorIndex = allLines[currentLineNo]!.length;
+            if (cursor.column > 0) {
+                cursor.column--;
+            } else if (cursor.line > 0) {
+                cursor.line--;
+                cursor.column = lines[cursor.line]!.length;
             }
             break;
         case "ArrowRight":
-            if (cursorIndex < allLines[currentLineNo]!.length) {
-                cursorIndex++;
-            } else if (currentLineNo < allLines.length - 1) {
-                currentLineNo++;
-                cursorIndex = 0;
+            if (cursor.column < lines[cursor.line]!.length) {
+                cursor.column++;
+            } else if (cursor.line < lines.length - 1) {
+                cursor.line++;
+                cursor.column = 0;
             }
             break;
         case "ArrowUp":
-            if (currentLineNo > 0) {
-                currentLineNo--;
+            if (cursor.line > 0) {
+                cursor.line--;
                 if (!verticalMovement) {
                     verticalMovement = true;
-                    savedVerticalCursorIndex = cursorIndex;
+                    savedVerticalCursorIndex = cursor.column;
                 }
-                cursorIndex = Math.min(savedVerticalCursorIndex, allLines[currentLineNo]!.length);
+                cursor.column = Math.min(savedVerticalCursorIndex, lines[cursor.line]!.length);
             } else {
-                cursorIndex = 0;
+                cursor.column = 0;
             }
             break;
         case "ArrowDown":
-            if (currentLineNo < allLines.length - 1) {
-                currentLineNo++;
+            if (cursor.line < lines.length - 1) {
+                cursor.line++;
                 if (!verticalMovement) {
                     verticalMovement = true;
-                    savedVerticalCursorIndex = cursorIndex;
+                    savedVerticalCursorIndex = cursor.column;
                 }
-                cursorIndex = Math.min(savedVerticalCursorIndex, allLines[currentLineNo]!.length);
+                cursor.column = Math.min(savedVerticalCursorIndex, lines[cursor.line]!.length);
             } else {
-                cursorIndex = allLines[currentLineNo]!.length;
+                cursor.column = lines[cursor.line]!.length;
             }
             break;
         case "Tab": {
-            const noOfSpaces = 4 - cursorIndex % 4;
-            allLines[currentLineNo] = insertInString(
-                allLines[currentLineNo]!, cursorIndex, " ".repeat(noOfSpaces));
-            cursorIndex += noOfSpaces;
+            const noOfSpaces = 4 - cursor.column % 4;
+            lines[cursor.line] = insertInString(
+                lines[cursor.line]!, cursor.column, " ".repeat(noOfSpaces));
+            cursor.column += noOfSpaces;
             break;
         }
         case "SpaceBar":
-            allLines[currentLineNo] = insertInString(allLines[currentLineNo]!, cursorIndex, " ");
-            cursorIndex++;
+            lines[cursor.line] = insertInString(lines[cursor.line]!, cursor.column, " ");
+            cursor.column++;
             break;
         default:
             if (event.key.length === 1) {
-                allLines[currentLineNo] = insertInString(allLines[currentLineNo]!, cursorIndex, event.key);
-                cursorIndex++;
+                lines[cursor.line] = insertInString(lines[cursor.line]!, cursor.column, event.key);
+                cursor.column++;
             }
     }
-
-    if (shiftHold){
-        // add selection highligthing to DOM
-        addSelection(savedSelectionCursorLine, savedSelectionCursorIndex, currentLineNo, cursorIndex);
-    }
-
-    renderLine(currentLineNo, true);
+    renderDOM();
 }
 
 textBox.addEventListener("keydown", keyHandler)
