@@ -4,10 +4,10 @@ const textBox : HTMLDivElement= document.querySelector<HTMLDivElement>("#text-bo
 const initialLine : HTMLDivElement = document.querySelector<HTMLDivElement>("#line-1")!;
 
 let hasWritten : boolean = false;
-let currentLineNo : number = 0; // zero-indexed
 let lineElements : HTMLDivElement[] = [initialLine];
-let allLines : string[] = [initialLine.textContent ?? ""];
+let allLines : string[] = [initialLine.textContent!];
 
+let currentLineNo : number = 0; // zero-indexed
 // For a line of n chars, the cursor can be in n + 1 positions:
 // the valid boundaries are 0..n, inclusive.
 // cursorIndex is the number of characters before the cursor, so
@@ -21,6 +21,7 @@ let verticalMovement : boolean = false;
 let shiftHold : boolean = false;
 let savedSelectionCursorLine : number = currentLineNo;
 let savedSelectionCursorIndex : number = cursorIndex;
+let selectedLineNos : number[] = [];
 
 function insertInString(s : string, i : number, v : string) : string {
     return s.slice(0, i) + v + s.slice(i);
@@ -66,7 +67,7 @@ function addCursor(line : HTMLDivElement, cursorPos : number) {
     return cursor;
 }
 
-function addSpanToLine(lineNo : number, startI: number, endI? :number) {
+function addSelectionToLine(lineNo : number, startI: number, endI? :number) {
     const highlighted : HTMLSpanElement = document.createElement("span");
     highlighted.className = "selection";
     const lineText : string = lineElements[lineNo]!.textContent;
@@ -78,6 +79,7 @@ function addSpanToLine(lineNo : number, startI: number, endI? :number) {
     lineElements[lineNo]!.textContent = inDiv;
     highlighted.textContent = inSpan;
     lineElements[lineNo]!.appendChild(highlighted);
+    selectedLineNos.push(lineNo);
 }
 
 function addSelection(startL : number, startI: number, endL : number, endI :number){
@@ -86,14 +88,26 @@ function addSelection(startL : number, startI: number, endL : number, endI :numb
         [startI, endI] = [endI, startI];
     }
     if (startL === endL){
-        addSpanToLine(startL, startI, endI);
+        addSelectionToLine(startL, startI, endI);
     } else {
-        addSpanToLine(startL, startI);
+        addSelectionToLine(startL, startI);
         for (let i = startL + 1; i < endL; i++){
-            addSpanToLine(i,0);
+            addSelectionToLine(i,0);
         }
-        addSpanToLine(endL, 0, endI);
+        addSelectionToLine(endL, 0, endI);
     }
+}
+
+function removeSelections() {
+    for (const lineNo of selectedLineNos){
+        const selected : HTMLSpanElement | null | undefined= lineElements[lineNo]?.querySelector("span");
+        if (!selected){
+            throw new Error("Selection is malformed");
+        }
+        lineElements[lineNo]!.textContent += selected.textContent!;
+        selected.remove();
+    }
+    selectedLineNos = [];
 }
 
 function removeAt(value : string, i : number) : string {
@@ -133,6 +147,7 @@ function keyHandler(event : KeyboardEvent) {
         }
     } else if (event.key !== "Shift") {
         shiftHold = false;
+        removeSelections(); // for now - will be more advanced in future
     }
 
     removeCursor(lineElements[currentLineNo]!);
