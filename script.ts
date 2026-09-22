@@ -1,7 +1,6 @@
 export {}
 
 const textBox : HTMLDivElement= document.querySelector<HTMLDivElement>("#text-box")!;
-const initialLine : HTMLDivElement = document.querySelector<HTMLDivElement>("#line-1")!;
 
 type Position = {
     line: number;
@@ -11,45 +10,36 @@ type Position = {
 type Selection = {
     anchor: Position;
     active: Position;
-} | null;
+};
 
-type EditorState = {
+type TextEditorState = {
     lines: string[];
     cursor: Position;
+    selecting : boolean;
     selection: Selection;
 };
 
 
 let hasWritten : boolean = false;
-let lineElements : HTMLDivElement[] = [initialLine];
-let allLines : string[] = [initialLine.textContent!];
 
-let currentLineNo : number = 0; // zero-indexed
-// For a line of n chars, the cursor can be in n + 1 positions:
-// the valid boundaries are 0..n, inclusive.
-// cursorIndex is the number of characters before the cursor, so
-// cursorIndex ==== currentLineText.slice(0, cursorIndex).length.
-let cursorIndex : number = 0; 
+let cursor : Position = {
+    line: 0,
+    column: 0   
+};
 
 
-let savedVerticalCursorIndex : number = cursorIndex;
+let savedVerticalCursorIndex : number;
 let verticalMovement : boolean = false;
 
-let shiftHold : boolean = false;
-let savedSelectionCursorLine : number = currentLineNo;
-let savedSelectionCursorIndex : number = cursorIndex;
-let selectedLineNos : number[] = [];
+let editorState : TextEditorState = {
+    lines : [],
+    cursor: cursor,
+    selecting : false,
+    selection: {anchor: cursor, active: cursor},
+}
 
 function insertInString(s : string, i : number, v : string) : string {
     return s.slice(0, i) + v + s.slice(i);
-}
-
-function renderLine(lineNo : number, withCursor : boolean) {
-    const line = lineElements[lineNo]!;
-    line.textContent = allLines[lineNo]!;
-    if (withCursor) {
-        addCursor(line, cursorIndex);
-    }
 }
 
 // Must work even when line has no cursor
@@ -115,17 +105,6 @@ function addSelection(startL : number, startI: number, endL : number, endI :numb
     }
 }
 
-function removeSelections() {
-    for (const lineNo of selectedLineNos){
-        const selected : HTMLSpanElement | null | undefined= lineElements[lineNo]?.querySelector("span");
-        if (!selected){
-            throw new Error("Selection is malformed");
-        }
-        lineElements[lineNo]!.textContent += selected.textContent!;
-        selected.remove();
-    }
-    selectedLineNos = [];
-}
 
 function removeAt(value : string, i : number) : string {
     if (i < 0 || i >= value.length) {
@@ -137,30 +116,30 @@ function removeAt(value : string, i : number) : string {
 
 function keyHandler(event : KeyboardEvent) {
     if (!hasWritten && (event.key.length === 1 || event.key === "Enter" || event.key === "SpaceBar")) {
-        allLines = [""];
-        lineElements[0]!.textContent = "";
         hasWritten = true;
-        cursorIndex = 0;
     }
+    if (!hasWritten) return;
 
+    /*
     if (event.altKey) return;
     if (event.ctrlKey && (event.key !== "C" && event.key !== "V")) return;
     if (event.metaKey) return;
     if (event.key === "Alt") return;
-
-
-    if (!hasWritten) return;
+    */
+    
+    //if not implemented return
+    if (event.key.length !== 1 || !["Enter", "Shift", "SpaceBar"].includes(event.key)) return;
 
     event.preventDefault();
 
     if (verticalMovement && event.key !== "ArrowUp" && event.key !== "ArrowDown") {
         verticalMovement = false;
     }
+
     if (event.shiftKey){
         if (!shiftHold){
             shiftHold = true;
-            savedSelectionCursorIndex = cursorIndex;
-            savedSelectionCursorLine = currentLineNo;
+            editorState.selection 
         }
     } else if (event.key !== "Shift") {
         shiftHold = false;
