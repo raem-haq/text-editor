@@ -15,8 +15,12 @@ let allLines : string[] = [initialLine.textContent ?? ""];
 let cursorIndex : number = 0; 
 
 
-let savedCursorIndex : number = cursorIndex;
+let savedVerticalCursorIndex : number = cursorIndex;
 let verticalMovement : boolean = false;
+
+let shiftHold : boolean = false;
+let savedSelectionCursorLine : number = currentLineNo;
+let savedSelectionCursorIndex : number = cursorIndex;
 
 function insertInString(s : string, i : number, v : string) : string {
     return s.slice(0, i) + v + s.slice(i);
@@ -62,6 +66,36 @@ function addCursor(line : HTMLDivElement, cursorPos : number) {
     return cursor;
 }
 
+function addSpanToLine(lineNo : number, startI: number, endI? :number) {
+    const highlighted : HTMLSpanElement = document.createElement("span");
+    highlighted.className = "selection";
+    const lineText : string = lineElements[lineNo]!.textContent;
+    const end : number = endI ?? lineText.length;
+    // remember cursor index is after char
+    // and slice does not include end index
+    const inDiv = lineText.slice(startI, end); 
+    const inSpan = lineText.slice(end);
+    lineElements[lineNo]!.textContent = inDiv;
+    highlighted.textContent = inSpan;
+    lineElements[lineNo]!.appendChild(highlighted);
+}
+
+function addSelection(startL : number, startI: number, endL : number, endI :number){
+    if (startL > endL || (startL == endL && startI > endL)){
+        [startL, endL] = [endL, startL];
+        [startI, endI] = [endI, startI];
+    }
+    if (startL === endL){
+        addSpanToLine(startL, startI, endI);
+    } else {
+        addSpanToLine(startL, startI);
+        for (let i = startL + 1; i < endL; i++){
+            addSpanToLine(i,0);
+        }
+        addSpanToLine(endL, 0, endI);
+    }
+}
+
 function removeAt(value : string, i : number) : string {
     if (i < 0 || i >= value.length) {
         return value;
@@ -77,12 +111,28 @@ function keyHandler(event : KeyboardEvent) {
         hasWritten = true;
         cursorIndex = 0;
     }
+
+    if (event.altKey) return;
+    if (event.ctrlKey && (event.key !== "C" && event.key !== "V")) return;
+    if (event.metaKey) return;
+    if (event.key === "Alt") return;
+
+
     if (!hasWritten) return;
 
     event.preventDefault();
 
     if (verticalMovement && event.key !== "ArrowUp" && event.key !== "ArrowDown") {
         verticalMovement = false;
+    }
+    if (event.shiftKey){
+        if (!shiftHold){
+            shiftHold = true;
+            savedSelectionCursorIndex = cursorIndex;
+            savedSelectionCursorLine = currentLineNo;
+        }
+    } else if (event.key !== "Shift") {
+        shiftHold = false;
     }
 
     removeCursor(lineElements[currentLineNo]!);
@@ -137,9 +187,9 @@ function keyHandler(event : KeyboardEvent) {
                 currentLineNo--;
                 if (!verticalMovement) {
                     verticalMovement = true;
-                    savedCursorIndex = cursorIndex;
+                    savedVerticalCursorIndex = cursorIndex;
                 }
-                cursorIndex = Math.min(savedCursorIndex, allLines[currentLineNo]!.length);
+                cursorIndex = Math.min(savedVerticalCursorIndex, allLines[currentLineNo]!.length);
             } else {
                 cursorIndex = 0;
             }
@@ -149,9 +199,9 @@ function keyHandler(event : KeyboardEvent) {
                 currentLineNo++;
                 if (!verticalMovement) {
                     verticalMovement = true;
-                    savedCursorIndex = cursorIndex;
+                    savedVerticalCursorIndex = cursorIndex;
                 }
-                cursorIndex = Math.min(savedCursorIndex, allLines[currentLineNo]!.length);
+                cursorIndex = Math.min(savedVerticalCursorIndex, allLines[currentLineNo]!.length);
             } else {
                 cursorIndex = allLines[currentLineNo]!.length;
             }
@@ -172,6 +222,11 @@ function keyHandler(event : KeyboardEvent) {
                 allLines[currentLineNo] = insertInString(allLines[currentLineNo]!, cursorIndex, event.key);
                 cursorIndex++;
             }
+    }
+
+    if (shiftHold){
+        // add selection highligthing to DOM
+        addSelection(savedSelectionCursorLine, savedSelectionCursorIndex, currentLineNo, cursorIndex);
     }
 
     renderLine(currentLineNo, true);
