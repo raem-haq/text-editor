@@ -160,11 +160,14 @@ function keyHandler(event : KeyboardEvent) {
 
             const newLine = document.createElement("div");
             newLine.setAttribute("tabindex", "0");
+
             textBox.insertBefore(newLine, lineElements[currentLineNo]!.nextElementSibling);
             allLines.splice(currentLineNo + 1, 0, newLineText);
             lineElements.splice(currentLineNo + 1, 0, newLine);
+
             currentLineNo++;
             cursorIndex = 0;
+            
             break;
         }
         case "Backspace":
