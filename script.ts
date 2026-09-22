@@ -3,6 +3,23 @@ export {}
 const textBox : HTMLDivElement= document.querySelector<HTMLDivElement>("#text-box")!;
 const initialLine : HTMLDivElement = document.querySelector<HTMLDivElement>("#line-1")!;
 
+type Position = {
+    line: number;
+    column: number;
+};
+
+type Selection = {
+    anchor: Position;
+    active: Position;
+} | null;
+
+type EditorState = {
+    lines: string[];
+    cursor: Position;
+    selection: Selection;
+};
+
+
 let hasWritten : boolean = false;
 let lineElements : HTMLDivElement[] = [initialLine];
 let allLines : string[] = [initialLine.textContent!];
