@@ -234,6 +234,26 @@ function editText(state: TextEditorState, key : string): void {
     }
 }
 
+function removeSelectedText(state: TextEditorState) : void {
+    const selection : Selection = state.selection;
+    if (selection === null) return;
+    let {anchor: start, active: end} = selection;
+
+    if (start.line > end.line || (start.line == end.line && start.column > end.column)){
+        [start, end] = [end, start];
+    }
+
+    if (start.line == end.line){
+        state.lines[start.line] = state.lines[start.line]!.slice(start.column, end.column);
+    } else {
+        state.lines[start.line] = state.lines[start.line]!.slice(0, start.column);
+        state.lines[end.line] = state.lines[end.line]!.slice(end.column);
+        state.lines = state.lines.slice(0, start.line+1).concat(state.lines.slice(end.line)); 
+    }
+    state.shiftHold = false;
+    state.selection = null;
+}
+
 function keyHandler(state: TextEditorState, event : KeyboardEvent): void {
 
     if (!isSupportedKey(event.key)) return;
@@ -254,9 +274,7 @@ function keyHandler(state: TextEditorState, event : KeyboardEvent): void {
 
     if (!moved) {
         if (state.shiftHold && state.selection !== null){
-            state.shiftHold = false;
-            //deleteinSelection();
-            state.selection = null;
+            removeSelectedText(state);
         }
         editText(state, event.key);
     }
