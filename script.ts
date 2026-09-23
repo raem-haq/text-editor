@@ -117,11 +117,9 @@ function isArrowKey(key: string){
 }
 
 function prepareSelection(state: TextEditorState, event : KeyboardEvent): void {
-    if (event.shiftKey && isArrowKey(event.key)){
-        if (!state.shiftHold){
-            state.shiftHold = true;
-            state.selection = {anchor: {...state.cursor}, active : {...state.cursor}};
-        }
+    if (event.shiftKey && isArrowKey(event.key) && !state.shiftHold){
+        state.shiftHold = true;
+        state.selection = {anchor: {...state.cursor}, active : {...state.cursor}};
     } else if (event.key !== "Shift" && !event.ctrlKey && !event.shiftKey) {
         state.shiftHold = false;
         state.selection = null;
@@ -249,13 +247,21 @@ function keyHandler(state: TextEditorState, event : KeyboardEvent): void {
     prepareSelection(state, event);
 
     const moved = moveCursor(state, event.key);
-    if (!moved && event.key !== "Shift") {
+
+    if (moved && state.shiftHold && state.selection !== null) {
+        state.selection.active = {...state.cursor};
+    }
+
+    if (!moved) {
+        if (state.shiftHold && state.selection !== null){
+            state.shiftHold = false;
+            //deleteinSelection();
+            state.selection = null;
+        }
         editText(state, event.key);
     }
 
-    if (state.selection !== null && event.shiftKey) {
-        state.selection.active = {...state.cursor};
-    }
+    
     renderDOM(state);
 }
 
