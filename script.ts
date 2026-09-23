@@ -12,40 +12,40 @@ type Selection = {
     active: Position;
 } | null;
 
-/*
 type TextEditorState = {
     lines: string[];
     cursor: Position;
     selection: Selection;
+    savedVerticalCursorIndex: number | null;
+    verticalMovement: boolean;
+    shiftHold: boolean;
 };
-*/
 
-let hasWritten : boolean = false;
-
-let lines : string[] = [];
-let cursor : Position = {line: 0, column: 0};
-let selection : Selection;
-
-let savedVerticalCursorIndex : number;
-let verticalMovement : boolean = false;
-let shiftHold : boolean = false;
+const state: TextEditorState = {
+    lines: ["Edit Text"],
+    cursor: {line: 0, column: 0},
+    selection: null,
+    savedVerticalCursorIndex: null,
+    verticalMovement: false,
+    shiftHold: false,
+};
 
 
 function insertInString(s : string, i : number, v : string) : string {
     return s.slice(0, i) + v + s.slice(i);
 }
 
-function renderDOM(){
+function renderDOM(state: TextEditorState): void {
     textBox.replaceChildren();
     let lineElements : HTMLDivElement[] = [];
-    for (const [i, line] of lines.entries()){
+    for (const line of state.lines){
         const div = document.createElement("div");
         div.textContent = line;
         textBox.appendChild(div);
         lineElements.push(div)
     }
-    addCursor(lineElements[cursor.line]!, cursor.column);
-    addSelection(lineElements, selection);
+    addCursor(lineElements[state.cursor.line]!, state.cursor.column);
+    addSelection(lineElements, state.selection);
 }
 
 
@@ -59,9 +59,7 @@ function addCursor(line : HTMLDivElement, cursorPos : number) {
     }
 
     // cursorPos is the number of characters before the cursor.
-    // splitText receives that same offset directly and returns the text node
-    // that begins at the cursor boundary, so the surrounding cursor span can
-    // be inserted before it.    const afterNode : Text = textNode.splitText(cursorPos);
+    // splitText returns the text node that begins at the cursor boundary.
     const afterNode = textNode.splitText(cursorPos);
 
     const cursor = document.createElement("span");
@@ -78,11 +76,13 @@ function addSelectionToLine(lineElem : HTMLDivElement, startI: number, endI? :nu
     const end : number = endI ?? lineText.length;
     // remember cursor index is after char
     // and slice does not include end index
-    const inDiv = lineText.slice(startI, end); 
-    const inSpan = lineText.slice(end);
-    lineElem!.textContent = inDiv;
-    highlighted.textContent = inSpan;
+    const beforeSelection = lineText.slice(0, startI);
+    const selectedText = lineText.slice(startI, end);
+    const afterSelection = lineText.slice(end);
+    lineElem!.textContent = beforeSelection;
+    highlighted.textContent = selectedText;
     lineElem!.appendChild(highlighted);
+    lineElem.append(afterSelection);
 }
 
 function addSelection(lineElems : HTMLDivElement[], selection : Selection){
@@ -112,38 +112,87 @@ function removeAt(value : string, i : number) : string {
     return value.slice(0, i) + value.slice(i + 1);
 }
 
-function keyHandler(event : KeyboardEvent) {
-    if (!hasWritten && (event.key.length === 1 || event.key === "Enter" || event.key === "SpaceBar")) {
-        hasWritten = true;
-    }
-    if (!hasWritten) return;
+function isArrowKey(key: string){
+    return (key.length >= 6 && key.slice(0, 4) === "Arrow");
+}
 
-    /*
-    if (event.altKey) return;
-    if (event.ctrlKey && (event.key !== "C" && event.key !== "V")) return;
-    if (event.metaKey) return;
-    if (event.key === "Alt") return;
-    */
-    
-    //if not implemented return
-    if (event.key.length !== 1 || !["Enter", "Shift", "SpaceBar"].includes(event.key)) return;
-
-    event.preventDefault();
-
-    if (verticalMovement && event.key !== "ArrowUp" && event.key !== "ArrowDown") {
-        verticalMovement = false;
-    }
-
-    if (event.shiftKey){
-        if (!shiftHold){
-            shiftHold = true;
-            selection = {anchor: cursor, active : cursor};
+function prepareSelection(state: TextEditorState, event : KeyboardEvent): void {
+    if (event.shiftKey && isArrowKey(event.key)){
+        if (!state.shiftHold){
+            state.shiftHold = true;
+            state.selection = {anchor: {...state.cursor}, active : {...state.cursor}};
         }
-    } else if (event.key !== "Shift") {
-        shiftHold = false;
+    } else if (event.key !== "Shift" && !event.ctrlKey && !event.shiftKey) {
+        state.shiftHold = false;
+        state.selection = null;
     }
+}
 
-    switch (event.key) {
+function isSupportedKey(key: string): boolean {
+    return key.length === 1 || [
+        "ArrowUp",
+        "ArrowDown",
+        "ArrowLeft",
+        "ArrowRight",
+        "Backspace",
+        "Enter",
+        "Tab"
+    ].includes(key);
+}
+
+function moveCursor(state: TextEditorState, key : string): boolean {
+    const {lines, cursor} = state;
+
+    switch (key) {
+        case "ArrowLeft":
+            if (cursor.column > 0) {
+                cursor.column--;
+            } else if (cursor.line > 0) {
+                cursor.line--;
+                cursor.column = lines[cursor.line]!.length;
+            }
+            return true;
+        case "ArrowRight":
+            if (cursor.column < lines[cursor.line]!.length) {
+                cursor.column++;
+            } else if (cursor.line < lines.length - 1) {
+                cursor.line++;
+                cursor.column = 0;
+            }
+            return true;
+        case "ArrowUp":
+            if (cursor.line > 0) {
+                cursor.line--;
+                if (!state.verticalMovement) {
+                    state.verticalMovement = true;
+                    state.savedVerticalCursorIndex = cursor.column;
+                }
+                cursor.column = Math.min(state.savedVerticalCursorIndex!, lines[cursor.line]!.length);
+            } else {
+                cursor.column = 0;
+            }
+            return true;
+        case "ArrowDown":
+            if (cursor.line < lines.length - 1) {
+                cursor.line++;
+                if (!state.verticalMovement) {
+                    state.verticalMovement = true;
+                    state.savedVerticalCursorIndex = cursor.column;
+                }
+                cursor.column = Math.min(state.savedVerticalCursorIndex!, lines[cursor.line]!.length);
+            } else {
+                cursor.column = lines[cursor.line]!.length;
+            }
+            return true;
+        default:
+            return false;
+    }
+}
+
+function editText(state: TextEditorState, key : string): void {
+    const {lines, cursor} = state;
+
+    switch (key) {
         case "Enter": {
             const currentLine = lines[cursor.line]!;
             const newLineText = currentLine.slice(cursor.column);
@@ -153,11 +202,11 @@ function keyHandler(event : KeyboardEvent) {
 
             cursor.line += 1;
             cursor.column = 0;
-            
+
             break;
         }
         case "Backspace":
-            if (cursor.line > 0) {
+            if (cursor.column > 0) {
                 lines[cursor.line] = removeAt(lines[cursor.line]!, cursor.column - 1);
                 cursor.column--;
             } else if (cursor.line > 0) {
@@ -166,46 +215,6 @@ function keyHandler(event : KeyboardEvent) {
                 lines[previousLineNo] += lines[cursor.line]!;
                 lines.splice(cursor.line, 1);
                 cursor.line = previousLineNo;
-            }
-            break;
-        case "ArrowLeft":
-            if (cursor.column > 0) {
-                cursor.column--;
-            } else if (cursor.line > 0) {
-                cursor.line--;
-                cursor.column = lines[cursor.line]!.length;
-            }
-            break;
-        case "ArrowRight":
-            if (cursor.column < lines[cursor.line]!.length) {
-                cursor.column++;
-            } else if (cursor.line < lines.length - 1) {
-                cursor.line++;
-                cursor.column = 0;
-            }
-            break;
-        case "ArrowUp":
-            if (cursor.line > 0) {
-                cursor.line--;
-                if (!verticalMovement) {
-                    verticalMovement = true;
-                    savedVerticalCursorIndex = cursor.column;
-                }
-                cursor.column = Math.min(savedVerticalCursorIndex, lines[cursor.line]!.length);
-            } else {
-                cursor.column = 0;
-            }
-            break;
-        case "ArrowDown":
-            if (cursor.line < lines.length - 1) {
-                cursor.line++;
-                if (!verticalMovement) {
-                    verticalMovement = true;
-                    savedVerticalCursorIndex = cursor.column;
-                }
-                cursor.column = Math.min(savedVerticalCursorIndex, lines[cursor.line]!.length);
-            } else {
-                cursor.column = lines[cursor.line]!.length;
             }
             break;
         case "Tab": {
@@ -220,12 +229,35 @@ function keyHandler(event : KeyboardEvent) {
             cursor.column++;
             break;
         default:
-            if (event.key.length === 1) {
-                lines[cursor.line] = insertInString(lines[cursor.line]!, cursor.column, event.key);
+            if (key.length === 1) {
+                lines[cursor.line] = insertInString(lines[cursor.line]!, cursor.column, key);
                 cursor.column++;
             }
     }
-    renderDOM();
 }
 
-textBox.addEventListener("keydown", keyHandler)
+function keyHandler(state: TextEditorState, event : KeyboardEvent): void {
+
+    if (!isSupportedKey(event.key)) return;
+
+    event.preventDefault();
+
+    if (state.verticalMovement && event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+        state.verticalMovement = false;
+    }
+
+    prepareSelection(state, event);
+
+    const moved = moveCursor(state, event.key);
+    if (!moved && event.key !== "Shift") {
+        editText(state, event.key);
+    }
+
+    if (state.selection !== null && event.shiftKey) {
+        state.selection.active = {...state.cursor};
+    }
+    renderDOM(state);
+}
+
+textBox.addEventListener("keydown", (event) => keyHandler(state, event));
+renderDOM(state);
