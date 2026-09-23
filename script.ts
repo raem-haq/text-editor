@@ -18,7 +18,6 @@ type TextEditorState = {
     selection: Selection;
     savedVerticalCursorIndex: number | null;
     verticalMovement: boolean;
-    shiftHold: boolean;
 };
 
 const state: TextEditorState = {
@@ -27,7 +26,6 @@ const state: TextEditorState = {
     selection: null,
     savedVerticalCursorIndex: null,
     verticalMovement: false,
-    shiftHold: false,
 };
 
 
@@ -113,29 +111,27 @@ function removeAt(value : string, i : number) : string {
 }
 
 function isArrowKey(key: string){
-    return (key.length >= 6 && key.slice(0, 4) === "Arrow");
+    return ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(key);
 }
 
-function prepareSelection(state: TextEditorState, event : KeyboardEvent): void {
-    if (event.shiftKey && isArrowKey(event.key) && !state.shiftHold){
-        state.shiftHold = true;
-        state.selection = {anchor: {...state.cursor}, active : {...state.cursor}};
-    } else if (event.key !== "Shift" && !event.ctrlKey && !event.shiftKey) {
-        state.shiftHold = false;
-        state.selection = null;
+type KeyCategory = "sticky" | "movement" | "editing" | "unsupported";
+
+function categorizeKey(event: KeyboardEvent): KeyCategory {
+    if (event.ctrlKey || event.metaKey || event.altKey || [
+        "Shift",
+        "Control",
+        "Alt",
+        "Meta",
+        "CapsLock",
+        "NumLock"
+    ].includes(event.key)) {
+        return "sticky";
     }
-}
-
-function isSupportedKey(key: string): boolean {
-    return key.length === 1 || [
-        "ArrowUp",
-        "ArrowDown",
-        "ArrowLeft",
-        "ArrowRight",
-        "Backspace",
-        "Enter",
-        "Tab"
-    ].includes(key);
+    if (isArrowKey(event.key)) return "movement";
+    if (event.key.length === 1 || ["Backspace", "Enter", "Tab"].includes(event.key)) {
+        return "editing";
+    }
+    return "unsupported";
 }
 
 function moveCursor(state: TextEditorState, key : string): boolean {
@@ -244,36 +240,42 @@ function removeSelectedText(state: TextEditorState) : void {
     }
 
     if (start.line == end.line){
-        state.lines[start.line] = state.lines[start.line]!.slice(start.column, end.column);
+        const line = state.lines[start.line]!;
+        state.lines[start.line] = line.slice(0, start.column) + line.slice(end.column);
     } else {
-        state.lines[start.line] = state.lines[start.line]!.slice(0, start.column);
-        state.lines[end.line] = state.lines[end.line]!.slice(end.column);
-        state.lines = state.lines.slice(0, start.line+1).concat(state.lines.slice(end.line)); 
+        const firstLine = state.lines[start.line]!.slice(0, start.column);
+        const lastLine = state.lines[end.line]!.slice(end.column);
+        state.lines.splice(start.line, end.line - start.line + 1, firstLine + lastLine);
     }
-    state.shiftHold = false;
+    state.cursor = {...start};
     state.selection = null;
 }
 
 function keyHandler(state: TextEditorState, event : KeyboardEvent): void {
+    const category = categorizeKey(event);
 
-    if (!isSupportedKey(event.key)) return;
+    if (category === "sticky" || category === "unsupported") return;
 
     event.preventDefault();
 
-    if (state.verticalMovement && event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+    if (state.verticalMovement && category !== "movement") {
         state.verticalMovement = false;
     }
 
-    prepareSelection(state, event);
-
-    const moved = moveCursor(state, event.key);
-
-    if (moved && state.shiftHold && state.selection !== null) {
-        state.selection.active = {...state.cursor};
+    const selecting = category === "movement" && event.shiftKey;
+    if (selecting && state.selection === null) {
+        state.selection = {anchor: {...state.cursor}, active: {...state.cursor}};
     }
 
-    if (!moved) {
-        if (state.shiftHold && state.selection !== null){
+    if (category === "movement") {
+        moveCursor(state, event.key);
+        if (selecting && state.selection !== null) {
+            state.selection.active = {...state.cursor};
+        } else if (!selecting) {
+            state.selection = null;
+        }
+    } else {
+        if (state.selection !== null) {
             removeSelectedText(state);
         }
         editText(state, event.key);
