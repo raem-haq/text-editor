@@ -210,20 +210,30 @@ function moveCursor(state: TextEditorState, key : string): boolean {
     }
 }
 
+function handleText(state: TextEditorState, text: string): void {
+    const {lines, cursor} = state;
+    lines[cursor.line] = insertInString(lines[cursor.line]!, cursor.column, text);
+    cursor.column++;
+}
+
+function handleEnter(state: TextEditorState){
+    const {lines, cursor} = state;
+    const currentLine = lines[cursor.line]!;
+    const newLineText = currentLine.slice(cursor.column);
+    lines[cursor.line] = currentLine.slice(0, cursor.column);
+
+    lines.splice(cursor.line + 1, 0, newLineText);
+
+    cursor.line += 1;
+    cursor.column = 0;
+}
+
 function editText(state: TextEditorState, key : string): void {
     const {lines, cursor} = state;
 
     switch (key) {
         case "Enter": {
-            const currentLine = lines[cursor.line]!;
-            const newLineText = currentLine.slice(cursor.column);
-            lines[cursor.line] = currentLine.slice(0, cursor.column);
-
-            lines.splice(cursor.line + 1, 0, newLineText);
-
-            cursor.line += 1;
-            cursor.column = 0;
-
+            handleEnter(state);
             break;
         }
         case "Backspace":
@@ -255,10 +265,22 @@ function editText(state: TextEditorState, key : string): void {
             break;
         default:
             if (key.length === 1) {
-                lines[cursor.line] = insertInString(lines[cursor.line]!, cursor.column, key);
-                cursor.column++;
+                handleText(state, key);
             }
     }
+}
+
+function pasteText(state: TextEditorState, text : string): void {
+    const lines = text.split("\n");
+    if (!lines) return;
+    handleText(state, lines[0]!);
+    if (lines.length > 1){
+        for (let i = 1; i < lines.length; i++){
+            handleEnter(state);
+            handleText(state, lines[i]!);
+        }
+    }
+
 }
 
 function removeSelectedText(state: TextEditorState) : void {
@@ -283,10 +305,10 @@ function removeSelectedText(state: TextEditorState) : void {
     state.selecting = false;
 }
 
-function copySelection(state: TextEditorState) : void {
+function copySelection(state: TextEditorState) : string {
     const selection : Selection = state.selection;
 
-    if (selection === null) return;
+    if (selection === null) return "";
     let {anchor: start, active: end} = selection;
 
     if (start.line > end.line || (start.line == end.line && start.column > end.column)){
@@ -304,8 +326,12 @@ function copySelection(state: TextEditorState) : void {
         }
         copyText += "\n" + state.lines[end.line]!.slice(0, end.column);
     }
-    navigator.clipboard.writeText(copyText);
+    return copyText;
 }
+
+
+
+
 
 function keyHandler(state: TextEditorState, event : KeyboardEvent): void {
     if (!isSupportedKey(event.key)) return;
@@ -357,4 +383,19 @@ function keyHandler(state: TextEditorState, event : KeyboardEvent): void {
 }
 
 textBox.addEventListener("keydown", (event) => keyHandler(state, event));
-//renderDOM(state);
+
+textBox.addEventListener("copy", (e) => {
+    if (!e.clipboardData) return;
+    e.preventDefault();
+    const text = copySelection(state);
+
+    e.clipboardData.setData("text/plain", text);
+});
+
+textBox.addEventListener("paste", (e) => {
+    if (!e.clipboardData) return;
+    e.preventDefault();
+
+    const text = e.clipboardData.getData("text/plain");
+    pasteText(state, text);
+});
