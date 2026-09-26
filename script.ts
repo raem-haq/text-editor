@@ -19,6 +19,7 @@ type TextEditorState = {
     selection: Selection;
     savedVerticalCursorIndex: number | null;
     verticalMovement: boolean;
+    hasWritten : boolean;
 };
 
 const state: TextEditorState = {
@@ -28,6 +29,7 @@ const state: TextEditorState = {
     selection: null,
     savedVerticalCursorIndex: null,
     verticalMovement: false,
+    hasWritten :  false,
 };
 
 
@@ -77,9 +79,12 @@ function addSelectionToLine(lineElem : HTMLDivElement, startI: number, endI? :nu
     // remember cursor index is after char
     // and slice does not include end index
     const beforeSelection = lineText.slice(0, startI);
-    const selectedText = lineText.slice(startI, end);
+    let selectedText : string = lineText.slice(startI, end);
     const afterSelection = lineText.slice(end);
     lineElem!.textContent = beforeSelection;
+    if (selectedText === ""){
+        selectedText = " ";
+    }
     highlighted.textContent = selectedText;
     lineElem!.appendChild(highlighted);
     lineElem.append(afterSelection);
@@ -278,9 +283,39 @@ function removeSelectedText(state: TextEditorState) : void {
     state.selecting = false;
 }
 
-function keyHandler(state: TextEditorState, event : KeyboardEvent): void {
+function copySelection(state: TextEditorState) : void {
+    const selection : Selection = state.selection;
 
+    if (selection === null) return;
+    let {anchor: start, active: end} = selection;
+
+    if (start.line > end.line || (start.line == end.line && start.column > end.column)){
+        [start, end] = [end, start];
+    }
+
+    let copyText : string = "";
+
+    if (start.line == end.line){
+        copyText += state.lines[start.line]!.slice(start.column, end.column);
+    } else {
+        copyText += state.lines[start.line]!.slice(start.column);
+        for (let i = start.line + 1; i < end.line; i++){
+            copyText += "\n" + state.lines[i]
+        }
+        copyText += "\n" + state.lines[end.line]!.slice(0, end.column);
+    }
+    navigator.clipboard.writeText(copyText);
+}
+
+function keyHandler(state: TextEditorState, event : KeyboardEvent): void {
     if (!isSupportedKey(event.key)) return;
+
+    if (!state.hasWritten && !isArrowKey(event.key)){
+        state.hasWritten = true;
+        state.lines = [""];
+        state.cursor = {line: 0, column: 0};
+    }
+    if (!state.hasWritten) return;
 
     event.preventDefault();
 
@@ -288,7 +323,10 @@ function keyHandler(state: TextEditorState, event : KeyboardEvent): void {
         state.verticalMovement = false;
     }
 
-    state.selecting = state.selecting || (event.shiftKey && isArrowKey(event.key) && !event.ctrlKey);
+    if (!state.selecting){
+        state.selecting = (event.shiftKey && isArrowKey(event.key) && !event.ctrlKey);
+    }
+    
     if (state.selecting && state.selection === null) {
         state.selection = {anchor: {...state.cursor}, active: {...state.cursor}};
     }
@@ -296,13 +334,16 @@ function keyHandler(state: TextEditorState, event : KeyboardEvent): void {
     const moved = moveCursor(state, event.key);
 
     if (moved) {
+        if (!event.shiftKey){
+            state.selecting = false;
+        }
         if (state.selecting && state.selection !== null) {
             state.selection.active = {...state.cursor};
         } else if (!state.selecting) {
             state.selection = null;
         }
     } else {
-        if (state.selection !== null && event.key !== "Tab") {
+        if (state.selecting && state.selection !== null && event.key !== "Tab") {
             removeSelectedText(state);
             if (event.key !== "Backspace") editText(state, event.key);
         } else {
@@ -310,8 +351,10 @@ function keyHandler(state: TextEditorState, event : KeyboardEvent): void {
         }
     }
     
+    console.log(state.selecting, event.key, state.lines);
+    
     renderDOM(state);
 }
 
 textBox.addEventListener("keydown", (event) => keyHandler(state, event));
-renderDOM(state);
+//renderDOM(state);
