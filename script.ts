@@ -213,7 +213,7 @@ function moveCursor(state: TextEditorState, key : string): boolean {
 function handleText(state: TextEditorState, text: string): void {
     const {lines, cursor} = state;
     lines[cursor.line] = insertInString(lines[cursor.line]!, cursor.column, text);
-    cursor.column++;
+    cursor.column += text.length;
 }
 
 function handleEnter(state: TextEditorState){
@@ -335,6 +335,7 @@ function copySelection(state: TextEditorState) : string {
 
 function keyHandler(state: TextEditorState, event : KeyboardEvent): void {
     if (!isSupportedKey(event.key)) return;
+    if (event.ctrlKey) return;
 
     if (!state.hasWritten && !isArrowKey(event.key)){
         state.hasWritten = true;
@@ -390,6 +391,7 @@ textBox.addEventListener("copy", (e) => {
     const text = copySelection(state);
 
     e.clipboardData.setData("text/plain", text);
+    renderDOM(state);
 });
 
 textBox.addEventListener("paste", (e) => {
@@ -398,4 +400,15 @@ textBox.addEventListener("paste", (e) => {
 
     const text = e.clipboardData.getData("text/plain");
     pasteText(state, text);
+    renderDOM(state);
+});
+
+textBox.addEventListener("cut", (e) => {
+    if (!e.clipboardData) return;
+    e.preventDefault();
+
+    const text = copySelection(state);
+    e.clipboardData.setData("text/plain", text);
+    removeSelectedText(state);
+    renderDOM(state);
 });
