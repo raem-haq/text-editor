@@ -28,7 +28,7 @@ type EditorMemento = {
     cursor: Position;
     selecting: boolean;
     selection: Selection;
-    hasWritten: boolean;
+    //hasWritten: boolean;
 };
 
 type EditorHistory = {
@@ -63,7 +63,7 @@ function captureMemento(state: TextEditorState): EditorMemento {
                 anchor: {...state.selection.anchor},
                 active: {...state.selection.active},
             },
-        hasWritten: state.hasWritten,
+        //hasWritten: state.hasWritten,
     };
 }
 
@@ -77,7 +77,7 @@ function restoreMemento(state: TextEditorState, memento: EditorMemento): void {
             anchor: {...memento.selection.anchor},
             active: {...memento.selection.active},
         };
-    state.hasWritten = memento.hasWritten;
+    //state.hasWritten = memento.hasWritten;
     state.verticalMovement = false;
     state.savedVerticalCursorIndex = null;
 }
@@ -85,7 +85,10 @@ function restoreMemento(state: TextEditorState, memento: EditorMemento): void {
 
 function undo(history: EditorHistory, state: TextEditorState): boolean {
     const previous = history.undoStack.pop();
-    if (previous === undefined) return false;
+    if (previous === undefined) {
+        console.log("gchv");
+        return false;
+    }
 
     history.redoStack.push(captureMemento(state));
     restoreMemento(state, previous);
@@ -411,28 +414,34 @@ function copySelection(state: TextEditorState) : string {
 
 
 function keyHandler(state: TextEditorState, history: EditorHistory, event : KeyboardEvent): void {
+    console.log(history.undoStack.at(-1)?.lines);
     if (!isSupportedKey(event.key)) return;
 
     const isMac = navigator.platform.toUpperCase().includes("MAC");
 
-    if (isMac && event.metaKey && event.key == "Z" && !event.shiftKey || 
-        !isMac && event.ctrlKey && event.key == "Z") {
-            undo(history, state);
-    } else if (isMac && event.metaKey && event.key == "Z" && event.shiftKey || 
-        !isMac && event.ctrlKey && event.key == "Y") {
-            redo(history, state);
-    }
 
-    if (event.ctrlKey) return;
-
-    if (!state.hasWritten && !isArrowKey(event.key)){
+    if (!state.hasWritten && !isArrowKey(event.key) && !event.ctrlKey){
         state.hasWritten = true;
         state.lines = [""];
         state.cursor = {line: 0, column: 0};
+        history.undoStack.push(captureMemento(state));
     }
     if (!state.hasWritten) return;
 
     event.preventDefault();
+
+    if (isMac && event.metaKey && event.key == "z" && !event.shiftKey || 
+        !isMac && event.ctrlKey && event.key == "z") { // "z" must be lowercase
+            console.log("undoing");
+            undo(history, state);
+            renderDOM(state);
+            return;
+    } else if (isMac && event.metaKey && event.key == "z" && event.shiftKey || 
+        !isMac && event.ctrlKey && event.key == "y") {
+            redo(history, state);
+            renderDOM(state);
+            return;
+    } else if (event.ctrlKey) return;
 
     if (state.verticalMovement && event.key !== "ArrowUp" && event.key !== "ArrowDown") {
         state.verticalMovement = false;
@@ -462,11 +471,14 @@ function keyHandler(state: TextEditorState, history: EditorHistory, event : Keyb
             removeSelectedText(state);
             if (event.key !== "Backspace") editText(state, event.key);
         } else {
-            state.writtenSinceUndo = editText(state, event.key) || state.writtenSinceUndo; //order matters
+            if (editText(state, event.key)){
+                state.writtenSinceUndo = true;
+                history.undoStack.push(captureMemento(state));
+            }
         }
     }
     
-    console.log(state.selecting, event.key, state.lines);
+    //console.log(state.selecting, event.key, state.lines);
     
     renderDOM(state);
 }
