@@ -29,6 +29,8 @@ type EditorMemento = {
     selecting: boolean;
     selection: Selection;
     //hasWritten: boolean;
+    category: string;
+    time: number;
 };
 
 type EditorHistory = {
@@ -52,7 +54,42 @@ const history: EditorHistory = {
     redoStack: [],
 };
 
-function captureMemento(state: TextEditorState): EditorMemento {
+function keyCategory(key: string): string {
+    if (isArrowKey(key)) return "movement";
+
+    switch (key.toLowerCase()) {
+        case "paste":
+            return "paste";
+        case "cut":
+            return "cut";
+        case "enter":
+            return "enter";
+        case "backspace":
+            return "backspace";
+        case "delete":
+            return "delete";
+        default:
+            return key.length === 1 ? "type" : "other";
+    }
+}
+
+function pushToUndo(state: TextEditorState, history: EditorHistory, key: string, oldCursor: Position): void {
+    const category : string = keyCategory(key); 
+    const previous : EditorMemento = history.undoStack.at(-1)!;
+    if (
+        state.writtenSinceUndo &&
+        previous.category === category &&
+        previous.cursor === oldCursor &&
+        Date.now() - previous.time < 500 && // 500 ms - 0.5 s
+        key !== "Space" && key !== "Enter"
+    ) {
+        return;
+    } else {
+        history.undoStack.push(captureMemento(state, key));
+    }
+}
+
+function captureMemento(state: TextEditorState, key?: string): EditorMemento {
     return {
         lines: [...state.lines],
         cursor: {...state.cursor},
@@ -64,6 +101,8 @@ function captureMemento(state: TextEditorState): EditorMemento {
                 active: {...state.selection.active},
             },
         //hasWritten: state.hasWritten,
+        time: Date.now(),
+        category: key ?? keyCategory(key) : null,
     };
 }
 
@@ -83,14 +122,14 @@ function restoreMemento(state: TextEditorState, memento: EditorMemento): void {
 }
 
 
-function undo(history: EditorHistory, state: TextEditorState): boolean {
+function undo(history: EditorHistory, state: TextEditorState, key: string): boolean {
     const previous = history.undoStack.pop();
     if (previous === undefined) {
         console.log("gchv");
         return false;
     }
 
-    history.redoStack.push(captureMemento(state));
+    history.redoStack.push(captureMemento(state, key));
     restoreMemento(state, previous);
     state.writtenSinceUndo = false;
     return true;
@@ -408,7 +447,6 @@ function copySelection(state: TextEditorState) : string {
     }
     return copyText;
 }
-
 
 
 
