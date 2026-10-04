@@ -81,6 +81,24 @@ function restoreMemento(state: TextEditorState, memento: EditorMemento): void {
 }
 
 
+function undo(history: EditorHistory, state: TextEditorState): boolean {
+    const previous = history.undoStack.pop();
+    if (previous === undefined) return false;
+
+    history.redoStack.push(captureMemento(state));
+    restoreMemento(state, previous);
+    return true;
+}
+
+function redo(history: EditorHistory, state: TextEditorState): boolean {
+    const next = history.redoStack.pop();
+    if (next === undefined) return false;
+
+    history.undoStack.push(captureMemento(state));
+    restoreMemento(state, next);
+    return true;
+}
+
 
 
 function insertInString(s : string, i : number, v : string) : string {
