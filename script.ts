@@ -20,6 +20,7 @@ type TextEditorState = {
     savedVerticalCursorIndex: number | null;
     verticalMovement: boolean;
     hasWritten : boolean;
+    writtenSinceUndo : boolean;
 };
 
 type EditorMemento = {
@@ -43,6 +44,7 @@ const state: TextEditorState = {
     savedVerticalCursorIndex: null,
     verticalMovement: false,
     hasWritten :  false,
+    writtenSinceUndo : false,
 };
 
 const history: EditorHistory = {
@@ -87,10 +89,15 @@ function undo(history: EditorHistory, state: TextEditorState): boolean {
 
     history.redoStack.push(captureMemento(state));
     restoreMemento(state, previous);
+    state.writtenSinceUndo = false;
     return true;
 }
 
 function redo(history: EditorHistory, state: TextEditorState): boolean {
+    if (state.writtenSinceUndo) {
+        history.redoStack = [];
+        return false;
+    }
     const next = history.redoStack.pop();
     if (next === undefined) return false;
 
@@ -98,7 +105,6 @@ function redo(history: EditorHistory, state: TextEditorState): boolean {
     restoreMemento(state, next);
     return true;
 }
-
 
 
 function insertInString(s : string, i : number, v : string) : string {
@@ -296,7 +302,7 @@ function handleEnter(state: TextEditorState){
     cursor.column = 0;
 }
 
-function editText(state: TextEditorState, key : string): void {
+function editText(state: TextEditorState, key : string): boolean {
     const {lines, cursor} = state;
 
     switch (key) {
@@ -334,8 +340,11 @@ function editText(state: TextEditorState, key : string): void {
         default:
             if (key.length === 1) {
                 handleText(state, key);
+            } else {
+                return false;
             }
     }
+    return true;
 }
 
 function pasteText(state: TextEditorState, text : string): void {
@@ -401,8 +410,19 @@ function copySelection(state: TextEditorState) : string {
 
 
 
-function keyHandler(state: TextEditorState, event : KeyboardEvent): void {
+function keyHandler(state: TextEditorState, history: EditorHistory, event : KeyboardEvent): void {
     if (!isSupportedKey(event.key)) return;
+
+    const isMac = navigator.platform.toUpperCase().includes("MAC");
+
+    if (isMac && event.metaKey && event.key == "Z" && !event.shiftKey || 
+        !isMac && event.ctrlKey && event.key == "Z") {
+            undo(history, state);
+    } else if (isMac && event.metaKey && event.key == "Z" && event.shiftKey || 
+        !isMac && event.ctrlKey && event.key == "Y") {
+            redo(history, state);
+    }
+
     if (event.ctrlKey) return;
 
     if (!state.hasWritten && !isArrowKey(event.key)){
@@ -442,7 +462,7 @@ function keyHandler(state: TextEditorState, event : KeyboardEvent): void {
             removeSelectedText(state);
             if (event.key !== "Backspace") editText(state, event.key);
         } else {
-            editText(state, event.key);
+            state.writtenSinceUndo = editText(state, event.key) || state.writtenSinceUndo; //order matters
         }
     }
     
@@ -451,7 +471,7 @@ function keyHandler(state: TextEditorState, event : KeyboardEvent): void {
     renderDOM(state);
 }
 
-textBox.addEventListener("keydown", (event) => keyHandler(state, event));
+textBox.addEventListener("keydown", (event) => keyHandler(state, history, event));
 
 textBox.addEventListener("copy", (e) => {
     if (!e.clipboardData) return;
@@ -480,3 +500,4 @@ textBox.addEventListener("cut", (e) => {
     removeSelectedText(state);
     renderDOM(state);
 });
+
