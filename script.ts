@@ -22,6 +22,19 @@ type TextEditorState = {
     hasWritten : boolean;
 };
 
+type EditorMemento = {
+    lines: string[];
+    cursor: Position;
+    selecting: boolean;
+    selection: Selection;
+    hasWritten: boolean;
+};
+
+type EditorHistory = {
+    undoStack: EditorMemento[];
+    redoStack: EditorMemento[];
+};
+
 const state: TextEditorState = {
     lines: ["Edit Text"],
     cursor: {line: 0, column: 0},
@@ -31,6 +44,85 @@ const state: TextEditorState = {
     verticalMovement: false,
     hasWritten :  false,
 };
+
+const history: EditorHistory = {
+    undoStack: [],
+    redoStack: [],
+};
+
+function captureMemento(state: TextEditorState): EditorMemento {
+    return {
+        lines: [...state.lines],
+        cursor: {...state.cursor},
+        selecting: state.selecting,
+        selection: state.selection === null
+            ? null
+            : {
+                anchor: {...state.selection.anchor},
+                active: {...state.selection.active},
+            },
+        hasWritten: state.hasWritten,
+    };
+}
+
+function restoreMemento(state: TextEditorState, memento: EditorMemento): void {
+    state.lines = [...memento.lines];
+    state.cursor = {...memento.cursor};
+    state.selecting = memento.selecting;
+    state.selection = memento.selection === null
+        ? null
+        : {
+            anchor: {...memento.selection.anchor},
+            active: {...memento.selection.active},
+        };
+    state.hasWritten = memento.hasWritten;
+    state.verticalMovement = false;
+    state.savedVerticalCursorIndex = null;
+}
+
+function mementosMatch(first: EditorMemento, second: EditorMemento): boolean {
+    const selectionsMatch = first.selection === null
+        ? second.selection === null
+        : second.selection !== null
+            && first.selection.anchor.line === second.selection.anchor.line
+            && first.selection.anchor.column === second.selection.anchor.column
+            && first.selection.active.line === second.selection.active.line
+            && first.selection.active.column === second.selection.active.column;
+
+    return first.lines.length === second.lines.length
+        && first.lines.every((line, index) => line === second.lines[index])
+        && first.cursor.line === second.cursor.line
+        && first.cursor.column === second.cursor.column
+        && first.selecting === second.selecting
+        && selectionsMatch
+        && first.hasWritten === second.hasWritten;
+}
+
+function recordHistory(history: EditorHistory, state: TextEditorState, before: EditorMemento): boolean {
+    if (mementosMatch(before, captureMemento(state))) return false;
+
+    history.undoStack.push(before);
+    history.redoStack.length = 0;
+    return true;
+}
+
+function undo(history: EditorHistory, state: TextEditorState): boolean {
+    const previous = history.undoStack.pop();
+    if (previous === undefined) return false;
+
+    history.redoStack.push(captureMemento(state));
+    restoreMemento(state, previous);
+    return true;
+}
+
+function redo(history: EditorHistory, state: TextEditorState): boolean {
+    const next = history.redoStack.pop();
+    if (next === undefined) return false;
+
+    history.undoStack.push(captureMemento(state));
+    restoreMemento(state, next);
+    return true;
+}
 
 
 function insertInString(s : string, i : number, v : string) : string {
