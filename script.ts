@@ -88,9 +88,8 @@ function keyCategory(event: KeyboardEvent): KeyCategory {
         case "cut":
         case "enter":
         case "backspace":
-            return keyCheck;
         case "tab":
-            return "type";
+            return keyCheck;
         case " ":
         case "spacebar":
             return "space";
@@ -109,8 +108,9 @@ function pushToUndo(state: TextEditorState, history: EditorHistory, category: Ke
         state.writtenSinceUndo &&
         state.continuing &&
         Date.now() - previous.time < 500 && // 500 ms - 0.5 s
-        category !== "space" && category !== "enter"
+        !["undo", "redo", "paste", "cut"].includes(category) // these should never coalesce
     ) {
+        previous.time = Date.now();
         previous.endBlockCursor = state.cursor;
         return;
     } else {
@@ -403,12 +403,11 @@ function pasteText(state: TextEditorState, text : string): void {
             handleText(state, lines[i]!);
         }
     }
-
 }
 
 function removeSelectedText(state: TextEditorState) : void {
     const selection : Selection = state.selection;
-    if (selection === null) return;
+    if (!state.selecting || selection === null) return;
     let {anchor: start, active: end} = selection;
 
     if (start.line > end.line || (start.line == end.line && start.column > end.column)){
@@ -457,17 +456,11 @@ function copySelection(state: TextEditorState) : string {
 
 
 
-function keyHandler(state: TextEditorState, history: EditorHistory, event : KeyboardEvent): void {
-    const category: KeyCategory = keyCategory(event);
-    console.log(event.key, category);
-    const key = event.key === "Spacebar" ? " " : event.key;
-    if (category === "other") {
-        console.log(key);
-        //throw new Error("Key: " + key + " is not recognised.");
-        return;
-    }
+function eventHandler(state: TextEditorState, history: EditorHistory, edit : EditorAction): void {
+    const {category, key, shift} = edit;
+    
 
-    const isFirstEdit: boolean = !state.hasWritten && ["enter", "backspace", "type", "tab", "space"].includes(category);
+    const isFirstEdit: boolean = !state.hasWritten && ["enter", "backspace", "type", "tab", "space", "paste"].includes(category);
     if (isFirstEdit) {
         state.hasWritten = true;
         state.lines = [""];
@@ -476,20 +469,18 @@ function keyHandler(state: TextEditorState, history: EditorHistory, event : Keyb
     if (!state.hasWritten) return;
 
     if (history.undoStack.length > 0) state.continuing = category === history.undoStack.at(-1)!.category && !state.moved;
-    if (category !== "movement") state.moved = false;
+    state.moved = category === "movement";
 
     if (state.verticalMovement && key !== "ArrowUp" && key !== "ArrowDown") {
         state.verticalMovement = false;
     }
 
     if (!state.selecting){
-        state.selecting = (event.shiftKey && isArrowKey(key) && !event.ctrlKey);
+        state.selecting = (shift && isArrowKey(key));
     }
     if (state.selecting && state.selection === null) {
         state.selection = {anchor: {...state.cursor}, active: {...state.cursor}};
     }
-
-    event.preventDefault();
 
 
     switch (category){
@@ -500,7 +491,7 @@ function keyHandler(state: TextEditorState, history: EditorHistory, event : Keyb
             redo(history, state);
             break;
         case "movement":
-            if (!event.shiftKey){
+            if (!shift){
                 state.selecting = false;
             }
             moveCursor(state, key);
@@ -509,6 +500,17 @@ function keyHandler(state: TextEditorState, history: EditorHistory, event : Keyb
             } else if (!state.selecting) {
                 state.selection = null;
             }
+            break;
+        case "paste":
+            pushToUndo(state, history, category);
+            state.writtenSinceUndo = true;
+            removeSelectedText(state); // internally checks if text is even being selected
+            pasteText(state, key); // key is text to paste when category === "paste"
+            break;
+        case "cut":
+            pushToUndo(state, history, category);
+            state.writtenSinceUndo = true;
+            removeSelectedText(state);
             break;
         case "backspace":
         case "enter":
@@ -531,36 +533,64 @@ function keyHandler(state: TextEditorState, history: EditorHistory, event : Keyb
     renderDOM(state);
 }
 
-textBox.addEventListener("keydown", (event) => keyHandler(state, history, event));
 
-textBox.addEventListener("copy", (e) => {
-    if (!e.clipboardData) return;
+function copyHandler(e: ClipboardEvent, state: TextEditorState){ // doesn't modify state, no need to update DOM
+    if (!e.clipboardData || !state.hasWritten) return;
     e.preventDefault();
     const text = copySelection(state);
-    state.continuing = false;
-
     e.clipboardData.setData("text/plain", text);
-    renderDOM(state);
+}
+
+
+textBox.addEventListener("copy", (event) => copyHandler(event, state));
+
+type EditorAction = {category: KeyCategory; key: string; shift: boolean; ctrl: boolean; meta: boolean }
+
+textBox.addEventListener("keydown", (event) => {
+    const category = keyCategory(event);
+    if (category === "other") {
+        console.log(event.key);
+        //throw new Error("Key: " + key + " is not recognised.");
+        return;
+    }
+    const e: EditorAction = {
+        category: category,
+        key: event.key === "Spacebar" ? " " : event.key,
+        shift: event.shiftKey,
+        ctrl: event.ctrlKey,
+        meta: event.metaKey,
+    }
+    eventHandler(state, history, e);
 });
 
-textBox.addEventListener("paste", (e) => {
-    if (!e.clipboardData) return;
-    e.preventDefault();
 
-    const text = e.clipboardData.getData("text/plain");
-    state.continuing = false;
-    pasteText(state, text);
-    renderDOM(state);
+textBox.addEventListener("cut", (event) => {
+    copyHandler(event, state);
+    const e: EditorAction = {
+        category: "cut",
+        key: "cut",
+        shift: false,
+        ctrl: false,
+        meta: false,
+    }
+    eventHandler(state, history, e);
 });
 
-textBox.addEventListener("cut", (e) => {
-    if (!e.clipboardData) return;
-    e.preventDefault();
 
-    const text = copySelection(state);
-    state.continuing = false;
-    e.clipboardData.setData("text/plain", text);
-    removeSelectedText(state);
-    renderDOM(state);
+textBox.addEventListener("paste", (event) => {
+    if (!event.clipboardData) return;
+    const text = event.clipboardData.getData("text/plain");
+
+    const e: EditorAction = {
+        category: "cut",
+        key: text,
+        shift: false,
+        ctrl: false,
+        meta: false,
+    }
+    
+    eventHandler(state, history, e);
 });
+
+
 
