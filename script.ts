@@ -451,11 +451,6 @@ function copySelection(state: TextEditorState) : string {
     return copyText;
 }
 
-
-
-
-
-
 function eventHandler(state: TextEditorState, history: EditorHistory, edit : EditorAction): void {
     const {category, key, shift} = edit;
     
@@ -508,9 +503,11 @@ function eventHandler(state: TextEditorState, history: EditorHistory, edit : Edi
             pasteText(state, key); // key is text to paste when category === "paste"
             break;
         case "cut":
-            pushToUndo(state, history, category);
-            state.writtenSinceUndo = true;
-            removeSelectedText(state);
+            if (state.selecting && state.selection !== null){
+                pushToUndo(state, history, category);
+                state.writtenSinceUndo = true;
+                removeSelectedText(state);
+            }
             break;
         case "backspace":
         case "enter":
@@ -534,9 +531,12 @@ function eventHandler(state: TextEditorState, history: EditorHistory, edit : Edi
 }
 
 
-function copyHandler(e: ClipboardEvent, state: TextEditorState){ // doesn't modify state, no need to update DOM
+function copyHandler(e: ClipboardEvent, state: TextEditorState){ 
+    // doesn't modify DOM variables
+    // no need to renderDOM() or pushToUndo()
     if (!e.clipboardData || !state.hasWritten) return;
     e.preventDefault();
+    state.continuing = false;
     const text = copySelection(state);
     e.clipboardData.setData("text/plain", text);
 }
@@ -553,6 +553,7 @@ textBox.addEventListener("keydown", (event) => {
         //throw new Error("Key: " + key + " is not recognised.");
         return;
     }
+    event.preventDefault();
     const e: EditorAction = {
         category: category,
         key: event.key === "Spacebar" ? " " : event.key,
@@ -579,16 +580,17 @@ textBox.addEventListener("cut", (event) => {
 
 textBox.addEventListener("paste", (event) => {
     if (!event.clipboardData) return;
+    event.preventDefault();
     const text = event.clipboardData.getData("text/plain");
 
     const e: EditorAction = {
-        category: "cut",
+        category: "paste",
         key: text,
         shift: false,
         ctrl: false,
         meta: false,
     }
-    
+
     eventHandler(state, history, e);
 });
 
