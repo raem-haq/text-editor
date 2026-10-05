@@ -359,6 +359,7 @@ function handleEnter(state: TextEditorState){
 }
 
 function editText(state: TextEditorState, key : string): void {
+    console.log("Entering "+ key);
     const {lines, cursor} = state;
     switch (key) {
         case "Enter": {
@@ -458,15 +459,15 @@ function copySelection(state: TextEditorState) : string {
 
 function keyHandler(state: TextEditorState, history: EditorHistory, event : KeyboardEvent): void {
     const category: KeyCategory = keyCategory(event);
+    console.log(event.key, category);
     const key = event.key === "Spacebar" ? " " : event.key;
-
-    if (event.ctrlKey || event.metaKey) return;
     if (category === "other") {
         console.log(key);
-        throw new Error("Key: " + key + " is not recognised.");
+        //throw new Error("Key: " + key + " is not recognised.");
+        return;
     }
 
-    const isFirstEdit = ["enter", "backspace", "type"].includes(category);
+    const isFirstEdit: boolean = !state.hasWritten && ["enter", "backspace", "type", "tab", "space"].includes(category);
     if (isFirstEdit) {
         state.hasWritten = true;
         state.lines = [""];
@@ -474,7 +475,7 @@ function keyHandler(state: TextEditorState, history: EditorHistory, event : Keyb
     }
     if (!state.hasWritten) return;
 
-    state.continuing = category === history.undoStack.at(-1)!.category && !state.moved
+    if (history.undoStack.length > 0) state.continuing = category === history.undoStack.at(-1)!.category && !state.moved;
     if (category !== "movement") state.moved = false;
 
     if (state.verticalMovement && key !== "ArrowUp" && key !== "ArrowDown") {
@@ -512,8 +513,10 @@ function keyHandler(state: TextEditorState, history: EditorHistory, event : Keyb
         case "backspace":
         case "enter":
         case "tab":
+        case "space":
         case "type":
             pushToUndo(state, history, category);
+            state.writtenSinceUndo = true;
             if (state.selecting && state.selection !== null && key !== "Tab") {
                 removeSelectedText(state);
                 if (key !== "Backspace") editText(state, key);
