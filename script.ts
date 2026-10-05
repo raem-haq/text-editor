@@ -21,7 +21,8 @@ type TextEditorState = {
     verticalMovement: boolean;
     hasWritten : boolean;
     writtenSinceUndo : boolean;
-    prevCursorPos : Position;
+    continuing: boolean;
+    moved : boolean;
 };
 
 type EditorMemento = {
@@ -29,9 +30,9 @@ type EditorMemento = {
     cursor: Position;
     selecting: boolean;
     selection: Selection;
-    //hasWritten: boolean;
-    category: string;
+    category: KeyCategory;
     time: number;
+    endBlockCursor: Position;
 };
 
 type EditorHistory = {
@@ -48,50 +49,76 @@ const state: TextEditorState = {
     verticalMovement: false,
     hasWritten :  false,
     writtenSinceUndo : false,
-    prevCursorPos : {line: 0, column: 0}, 
+    continuing: false,
+    moved: false,
 };
+type KeyCategory =
+    | "movement" | "undo" | "redo" | "paste" | "cut"
+    | "enter" | "backspace" | "type" | "other" | "tab" | "space";
 
 const history: EditorHistory = {
     undoStack: [],
     redoStack: [],
 };
 
-function keyCategory(key: string): string {
+function isArrowKey(key: string){
+    return ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(key);
+}
+
+function keyCategory(event: KeyboardEvent): KeyCategory {
+    const key = event.key;
+    const keyCheck = key.toLowerCase();
     if (isArrowKey(key)) return "movement";
 
-    switch (key.toLowerCase()) {
+    const isMac = navigator.platform.toUpperCase().includes("MAC");
+    const isUndo = isMac
+        ? event.metaKey && keyCheck === "z" && !event.shiftKey
+        : event.ctrlKey && keyCheck === "z";
+    if (isUndo) return "undo";
+    
+    const isRedo = isMac
+        ? event.metaKey && keyCheck === "z" && event.shiftKey
+        : event.ctrlKey && keyCheck === "y";
+    if (isRedo) return "redo";
+
+    if (event.metaKey || event.ctrlKey) return "other";
+
+    switch (keyCheck) {
         case "paste":
-            return "paste";
         case "cut":
-            return "cut";
         case "enter":
-            return "enter";
         case "backspace":
-            return "backspace";
-        case "delete":
-            return "delete";
+            return keyCheck;
+        case "tab":
+            return "type";
+        case " ":
+        case "spacebar":
+            return "space";
         default:
             return key.length === 1 ? "type" : "other";
     }
 }
 
-function pushToUndo(state: TextEditorState, history: EditorHistory, key: string): void {
-    const category : string = keyCategory(key); 
+function pushToUndo(state: TextEditorState, history: EditorHistory, category: KeyCategory): void {
+    if (history.undoStack.length === 0) {
+        history.undoStack.push(captureMemento(state, category));
+        return;
+    }
     const previous : EditorMemento = history.undoStack.at(-1)!;
     if (
         state.writtenSinceUndo &&
-        previous.category === category &&
-        previous.cursor === state.prevCursorPos &&
+        state.continuing &&
         Date.now() - previous.time < 500 && // 500 ms - 0.5 s
-        key !== "Space" && key !== "Enter"
+        category !== "space" && category !== "enter"
     ) {
+        previous.endBlockCursor = state.cursor;
         return;
     } else {
-        history.undoStack.push(captureMemento(state, key));
+        history.undoStack.push(captureMemento(state, category));
     }
 }
 
-function captureMemento(state: TextEditorState, key?: string): EditorMemento {
+function captureMemento(state: TextEditorState, category: KeyCategory): EditorMemento {
     return {
         lines: [...state.lines],
         cursor: {...state.cursor},
@@ -102,9 +129,9 @@ function captureMemento(state: TextEditorState, key?: string): EditorMemento {
                 anchor: {...state.selection.anchor},
                 active: {...state.selection.active},
             },
-        //hasWritten: state.hasWritten,
         time: Date.now(),
-        category: key === undefined ? "other" : keyCategory(key),
+        category: category,
+        endBlockCursor: {...state.cursor},
     };
 }
 
@@ -131,7 +158,7 @@ function undo(history: EditorHistory, state: TextEditorState): boolean {
         return false;
     }
 
-    history.redoStack.push(captureMemento(state));
+    history.redoStack.push(captureMemento(state, "undo"));
     restoreMemento(state, previous);
     state.writtenSinceUndo = false;
     return true;
@@ -145,7 +172,7 @@ function redo(history: EditorHistory, state: TextEditorState): boolean {
     const next = history.redoStack.pop();
     if (next === undefined) return false;
 
-    history.undoStack.push(captureMemento(state));
+    history.undoStack.push(captureMemento(state, "redo")); // redos are never coalesced
     restoreMemento(state, next);
     return true;
 }
@@ -260,21 +287,6 @@ function removeAt(value : string, i : number) : string {
     return value.slice(0, i) + value.slice(i + 1);
 }
 
-function isArrowKey(key: string){
-    return ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(key);
-}
-
-function isSupportedKey(key: string): boolean {
-    return key.length === 1 || [
-        "ArrowUp",
-        "ArrowDown",
-        "ArrowLeft",
-        "ArrowRight",
-        "Backspace",
-        "Enter",
-        "Tab"
-    ].includes(key);
-}
 
 
 
@@ -346,9 +358,8 @@ function handleEnter(state: TextEditorState){
     cursor.column = 0;
 }
 
-function editText(state: TextEditorState, key : string): boolean {
+function editText(state: TextEditorState, key : string): void {
     const {lines, cursor} = state;
-    state.prevCursorPos = cursor; // doesn't work in case of false
     switch (key) {
         case "Enter": {
             handleEnter(state);
@@ -366,7 +377,7 @@ function editText(state: TextEditorState, key : string): boolean {
                 cursor.line = previousLineNo;
             }
             break;
-        case "Tab": {
+        case "Tab":
             if (state.selecting && state.selection !== null){
                 manageTabsSelection(state);
             } else {
@@ -376,19 +387,9 @@ function editText(state: TextEditorState, key : string): boolean {
             cursor.column += noOfSpaces;
             }
             break;
-        }
-        case "SpaceBar":
-            lines[cursor.line] = insertInString(lines[cursor.line]!, cursor.column, " ");
-            cursor.column++;
-            break;
         default:
-            if (key.length === 1) {
-                handleText(state, key);
-            } else {
-                return false;
-            }
+            if (key.length === 1) handleText(state, key);
     }
-    return true;
 }
 
 function pasteText(state: TextEditorState, text : string): void {
@@ -450,93 +451,80 @@ function copySelection(state: TextEditorState) : string {
     return copyText;
 }
 
-function copyState(state: TextEditorState): TextEditorState{
-    return {
-        ...state, // shallow copy of object types -- overwritten below
-        lines: [...state.lines],
-        cursor: {...state.cursor},
-        selection: state.selection === null
-            ? null
-            : {
-                anchor: {...state.selection.anchor},
-                active: {...state.selection.active},
-            },
-        prevCursorPos: {...state.prevCursorPos},
-    };
-}
+
+
 
 
 
 function keyHandler(state: TextEditorState, history: EditorHistory, event : KeyboardEvent): void {
-    const isMac = navigator.platform.toUpperCase().includes("MAC");
-    const keyCheck = event.key.toLowerCase();
-    const isUndo = isMac
-        ? event.metaKey && keyCheck === "z" && !event.shiftKey
-        : event.ctrlKey && keyCheck === "z";
-    const isRedo = isMac
-        ? event.metaKey && keyCheck === "z" && event.shiftKey
-        : event.ctrlKey && keyCheck === "y";
+    const category: KeyCategory = keyCategory(event);
+    const key = event.key === "Spacebar" ? " " : event.key;
 
-    if (isUndo || isRedo) {
-        event.preventDefault();
-        if (isUndo) undo(history, state);
-        else redo(history, state);
-        renderDOM(state);
-        return;
+    if (event.ctrlKey || event.metaKey) return;
+    if (category === "other") {
+        console.log(key);
+        throw new Error("Key: " + key + " is not recognised.");
     }
 
-    // We want to avoid Ctrl+P or Windows+D
-    if (event.ctrlKey || event.metaKey || !isSupportedKey(event.key)) return;
-
-    const isFirstEdit = !state.hasWritten && !isArrowKey(event.key);
+    const isFirstEdit = ["enter", "backspace", "type"].includes(category);
     if (isFirstEdit) {
         state.hasWritten = true;
         state.lines = [""];
         state.cursor = {line: 0, column: 0};
-        history.undoStack.push(captureMemento(state));
     }
     if (!state.hasWritten) return;
 
-    event.preventDefault();
+    state.continuing = category === history.undoStack.at(-1)!.category && !state.moved
+    if (category !== "movement") state.moved = false;
 
-    if (state.verticalMovement && event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+    if (state.verticalMovement && key !== "ArrowUp" && key !== "ArrowDown") {
         state.verticalMovement = false;
     }
 
     if (!state.selecting){
-        state.selecting = (event.shiftKey && isArrowKey(event.key) && !event.ctrlKey);
+        state.selecting = (event.shiftKey && isArrowKey(key) && !event.ctrlKey);
     }
-    
     if (state.selecting && state.selection === null) {
         state.selection = {anchor: {...state.cursor}, active: {...state.cursor}};
     }
 
-    const moved = moveCursor(state, event.key);
+    event.preventDefault();
 
-    if (moved) {
-        if (!event.shiftKey){
-            state.selecting = false;
-        }
-        if (state.selecting && state.selection !== null) {
-            state.selection.active = {...state.cursor};
-        } else if (!state.selecting) {
-            state.selection = null;
-        }
-    } else {
-        const previous = copyState(state);
-        let edited = false;
-        if (state.selecting && state.selection !== null && event.key !== "Tab") {
-            removeSelectedText(state);
-            edited = true;
-            if (event.key !== "Backspace") edited = editText(state, event.key) || edited;
-        } else {
-            edited = editText(state, event.key);
-        }
-        if (edited) {
-            pushToUndo(previous, history, event.key);
-        }
+
+    switch (category){
+        case "undo":
+            undo(history, state);
+            break;
+        case "redo":
+            redo(history, state);
+            break;
+        case "movement":
+            if (!event.shiftKey){
+                state.selecting = false;
+            }
+            moveCursor(state, key);
+            if (state.selecting && state.selection !== null) {
+                state.selection.active = {...state.cursor};
+            } else if (!state.selecting) {
+                state.selection = null;
+            }
+            break;
+        case "backspace":
+        case "enter":
+        case "tab":
+        case "type":
+            pushToUndo(state, history, category);
+            if (state.selecting && state.selection !== null && key !== "Tab") {
+                removeSelectedText(state);
+                if (key !== "Backspace") editText(state, key);
+            } else {
+                editText(state, key);
+            }
+            break;
+        default:
+            console.log(key);
+            throw new Error("Key: " + key + " is not recognised and made it passed keyCategory.");
     }
-
     renderDOM(state);
 }
 
@@ -546,6 +534,7 @@ textBox.addEventListener("copy", (e) => {
     if (!e.clipboardData) return;
     e.preventDefault();
     const text = copySelection(state);
+    state.continuing = false;
 
     e.clipboardData.setData("text/plain", text);
     renderDOM(state);
@@ -556,6 +545,7 @@ textBox.addEventListener("paste", (e) => {
     e.preventDefault();
 
     const text = e.clipboardData.getData("text/plain");
+    state.continuing = false;
     pasteText(state, text);
     renderDOM(state);
 });
@@ -565,6 +555,7 @@ textBox.addEventListener("cut", (e) => {
     e.preventDefault();
 
     const text = copySelection(state);
+    state.continuing = false;
     e.clipboardData.setData("text/plain", text);
     removeSelectedText(state);
     renderDOM(state);
