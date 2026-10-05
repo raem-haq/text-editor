@@ -21,6 +21,7 @@ type TextEditorState = {
     verticalMovement: boolean;
     hasWritten : boolean;
     writtenSinceUndo : boolean;
+    prevCursorPos : Position;
 };
 
 type EditorMemento = {
@@ -47,6 +48,7 @@ const state: TextEditorState = {
     verticalMovement: false,
     hasWritten :  false,
     writtenSinceUndo : false,
+    prevCursorPos : {line: 0, column: 0}, 
 };
 
 const history: EditorHistory = {
@@ -73,13 +75,13 @@ function keyCategory(key: string): string {
     }
 }
 
-function pushToUndo(state: TextEditorState, history: EditorHistory, key: string, oldCursor: Position): void {
+function pushToUndo(state: TextEditorState, history: EditorHistory, key: string): void {
     const category : string = keyCategory(key); 
     const previous : EditorMemento = history.undoStack.at(-1)!;
     if (
         state.writtenSinceUndo &&
         previous.category === category &&
-        previous.cursor === oldCursor &&
+        previous.cursor === state.prevCursorPos &&
         Date.now() - previous.time < 500 && // 500 ms - 0.5 s
         key !== "Space" && key !== "Enter"
     ) {
@@ -102,7 +104,7 @@ function captureMemento(state: TextEditorState, key?: string): EditorMemento {
             },
         //hasWritten: state.hasWritten,
         time: Date.now(),
-        category: key ?? keyCategory(key) : null,
+        category: key === undefined ? "other" : keyCategory(key),
     };
 }
 
@@ -122,14 +124,14 @@ function restoreMemento(state: TextEditorState, memento: EditorMemento): void {
 }
 
 
-function undo(history: EditorHistory, state: TextEditorState, key: string): boolean {
+function undo(history: EditorHistory, state: TextEditorState): boolean {
     const previous = history.undoStack.pop();
     if (previous === undefined) {
         console.log("gchv");
         return false;
     }
 
-    history.redoStack.push(captureMemento(state, key));
+    history.redoStack.push(captureMemento(state));
     restoreMemento(state, previous);
     state.writtenSinceUndo = false;
     return true;
@@ -346,7 +348,7 @@ function handleEnter(state: TextEditorState){
 
 function editText(state: TextEditorState, key : string): boolean {
     const {lines, cursor} = state;
-
+    state.prevCursorPos = cursor; // doesn't work in case of false
     switch (key) {
         case "Enter": {
             handleEnter(state);
@@ -448,6 +450,20 @@ function copySelection(state: TextEditorState) : string {
     return copyText;
 }
 
+function copyState(state: TextEditorState): TextEditorState{
+    return {
+        ...state, // shallow copy of object types -- overwritten below
+        lines: [...state.lines],
+        cursor: {...state.cursor},
+        selection: state.selection === null
+            ? null
+            : {
+                anchor: {...state.selection.anchor},
+                active: {...state.selection.active},
+            },
+        prevCursorPos: {...state.prevCursorPos},
+    };
+}
 
 
 
@@ -469,6 +485,7 @@ function keyHandler(state: TextEditorState, history: EditorHistory, event : Keyb
         return;
     }
 
+    // We want to avoid Ctrl+P or Windows+D
     if (event.ctrlKey || event.metaKey || !isSupportedKey(event.key)) return;
 
     const isFirstEdit = !state.hasWritten && !isArrowKey(event.key);
@@ -506,7 +523,7 @@ function keyHandler(state: TextEditorState, history: EditorHistory, event : Keyb
             state.selection = null;
         }
     } else {
-        const previous = isFirstEdit ? null : captureMemento(state);
+        const previous = copyState(state);
         let edited = false;
         if (state.selecting && state.selection !== null && event.key !== "Tab") {
             removeSelectedText(state);
@@ -516,9 +533,7 @@ function keyHandler(state: TextEditorState, history: EditorHistory, event : Keyb
             edited = editText(state, event.key);
         }
         if (edited) {
-            if (previous !== null) history.undoStack.push(previous);
-            history.redoStack = [];
-            state.writtenSinceUndo = true;
+            pushToUndo(previous, history, event.key);
         }
     }
 
