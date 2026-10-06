@@ -179,7 +179,7 @@ function insertInString(s : string, i : number, v : string) : string {
 }
 
 function renderDOM(state: TextEditorState): void {
-    
+    placeholder.hidden = state.lines.length === 1 && state.lines[0] === "";
     textBox.replaceChildren();
     let lineElements : HTMLDivElement[] = [];
     for (const line of state.lines){
