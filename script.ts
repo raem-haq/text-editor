@@ -312,11 +312,11 @@ function editText(state: TextEditorState, key : string): void {
     console.log("Entering "+ key);
     const {lines, cursor} = state;
     switch (key) {
-        case "Enter": {
+        case "enter": {
             handleEnter(state);
             break;
         }
-        case "Backspace":
+        case "backspace":
             if (cursor.column > 0) {
                 lines[cursor.line] = removeAt(lines[cursor.line]!, cursor.column - 1);
                 cursor.column--;
@@ -328,7 +328,7 @@ function editText(state: TextEditorState, key : string): void {
                 cursor.line = previousLineNo;
             }
             break;
-        case "Tab":
+        case "tab":
             if (state.selection !== null){
                 manageTabsSelection(state);
             } else {
@@ -401,67 +401,54 @@ function copySelection(state: TextEditorState) : string {
 }
 
 function eventHandler(state: TextEditorState, history: EditorHistory, action : EditorAction): void {
+    const {type} = action;
 
-    switch (action.type){
+    if (type !== "move") state.savedVerticalCursorIndex = null;
+
+    switch (type){
         case "move":
             const {key, shift} = action;
-            if (state.savedVerticalCursorIndex !== null && key !== "ArrowUp" && key !== "ArrowDown") {
-                state.savedVerticalCursorIndex = null;
-            }
+            if (key !== "ArrowUp" && key !== "ArrowDown") state.savedVerticalCursorIndex = null;
 
             if (state.selection === null && (shift && isArrowKey(key))) {
                 state.selection = {anchor: {...state.cursor}, active: {...state.cursor}};
             }
 
-    }
+            if (!shift){
+                state.selection = null;
+            }
 
-
-    
-
-
-    switch (category){
+            moveCursor(state, key);
         case "undo":
             undo(history, state);
             break;
         case "redo":
             redo(history, state);
             break;
-        case "movement":
-            if (!shift){
-                state.selection = null;
-            }
-            moveCursor(state, key);
-            if (state.selection !== null) {
-                state.selection.active = {...state.cursor};
-            }
-            break;
-        case "paste":
-            pushToUndo(state, history, category);
-            removeSelectedText(state); // internally checks if text is even being selected
-            pasteText(state, key); // key is text to paste when category === "paste"
-            break;
         case "cut":
-            if (state.selection !== null){
-                pushToUndo(state, history, category);
-                removeSelectedText(state);
+            pushToUndo(state, history, type);
+            removeSelectedText(state);
+            break;
+        case "insert":
+            const {text, paste} = action;
+            pushToUndo(state, history, type);
+            removeSelectedText(state); // internally checks if text is even being selected
+            if (paste){
+                pasteText(state, text); // key is text to paste when category === "paste"
+            } else {
+                editText(state, text)
             }
             break;
         case "backspace":
         case "enter":
         case "tab":
-        case "space":
-        case "type":
-            pushToUndo(state, history, category);
-            if (state.selection !== null && key !== "Tab") {
+            if (state.selection !== null && type !== "tab") {
                 removeSelectedText(state);
-                if (key !== "Backspace") editText(state, key);
+                if (type !== "backspace") editText(state, type);
             } else {
-                editText(state, key);
+                editText(state, type);
             }
             break;
-        case "other":
-            console.log(key);
-            throw new Error("Key: " + key + " is not recognised and made it to switch.");
     }
     renderDOM(state);
 }
