@@ -35,9 +35,7 @@ type EditorMemento = {
 type EditorHistory = {
     undoStack: EditorMemento[];
     redoStack: EditorMemento[];
-    writtenSinceUndo : boolean;
-    continuing: boolean;
-    moved : boolean;
+    openBlockCategory: KeyCategory | null;
 };
 
 const state: TextEditorState = {
@@ -53,9 +51,7 @@ type KeyCategory =
 const history: EditorHistory = {
     undoStack: [],
     redoStack: [],
-    writtenSinceUndo : false,
-    continuing: false,
-    moved: false,
+    openBlockCategory: null,
 };
 
 function isArrowKey(key: string){
@@ -102,10 +98,8 @@ function pushToUndo(state: TextEditorState, history: EditorHistory, category: Ke
     }
     const previous : EditorMemento = history.undoStack.at(-1)!;
     if (
-        history.writtenSinceUndo &&
-        history.continuing &&
-        Date.now() - previous.time < 500 && // 500 ms - 0.5 s
-        !["undo", "redo", "paste", "cut"].includes(category) // these should never coalesce
+        history.openBlockCategory === category &&
+        Date.now() - previous.time < 500 // 500 ms - 0.5 s
     ) {
         previous.time = Date.now();
         previous.endBlockCursor = {...state.cursor};
@@ -154,15 +148,11 @@ function undo(history: EditorHistory, state: TextEditorState): boolean {
 
     history.redoStack.push(captureMemento(state, "undo"));
     restoreMemento(state, previous);
-    history.writtenSinceUndo = false;
+    history.openBlockCategory = null;
     return true;
 }
 
 function redo(history: EditorHistory, state: TextEditorState): boolean {
-    if (history.writtenSinceUndo) {
-        history.redoStack = [];
-        return false;
-    }
     const next = history.redoStack.pop();
     if (next === undefined) return false;
 
@@ -445,10 +435,9 @@ function copySelection(state: TextEditorState) : string {
 function eventHandler(state: TextEditorState, history: EditorHistory, edit : EditorAction): void {
     const {category, key, shift} = edit;
 
-    if (history.undoStack.length > 0) {
-        history.continuing = category === history.undoStack.at(-1)!.category && !history.moved;
-    }
-    history.moved = category === "movement";
+    if (!["undo", "redo", "movement"].includes(category)) history.redoStack = [];
+
+    history.openBlockCategory = ["backspace", "enter", "tab", "space", "type"].includes(category) ? category : null;
 
     if (state.savedVerticalCursorIndex !== null && key !== "ArrowUp" && key !== "ArrowDown") {
         state.savedVerticalCursorIndex = null;
@@ -477,14 +466,12 @@ function eventHandler(state: TextEditorState, history: EditorHistory, edit : Edi
             break;
         case "paste":
             pushToUndo(state, history, category);
-            history.writtenSinceUndo = true;
             removeSelectedText(state); // internally checks if text is even being selected
             pasteText(state, key); // key is text to paste when category === "paste"
             break;
         case "cut":
             if (state.selection !== null){
                 pushToUndo(state, history, category);
-                history.writtenSinceUndo = true;
                 removeSelectedText(state);
             }
             break;
@@ -494,7 +481,6 @@ function eventHandler(state: TextEditorState, history: EditorHistory, edit : Edi
         case "space":
         case "type":
             pushToUndo(state, history, category);
-            history.writtenSinceUndo = true;
             if (state.selection !== null && key !== "Tab") {
                 removeSelectedText(state);
                 if (key !== "Backspace") editText(state, key);
@@ -511,11 +497,9 @@ function eventHandler(state: TextEditorState, history: EditorHistory, edit : Edi
 
 
 function copyHandler(e: ClipboardEvent, state: TextEditorState){ 
-    // doesn't modify DOM variables
-    // no need to renderDOM() or pushToUndo()
+    // doesn't modify editor variables or undo logic
     if (!e.clipboardData) return;
     e.preventDefault();
-    history.continuing = false;
     const text = copySelection(state);
     e.clipboardData.setData("text/plain", text);
 }
@@ -529,7 +513,6 @@ textBox.addEventListener("keydown", (event) => {
     const category = keyCategory(event);
     if (category === "other") {
         console.log(event.key);
-        //throw new Error("Key: " + key + " is not recognised.");
         return;
     }
     event.preventDefault();
