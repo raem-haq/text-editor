@@ -7,11 +7,17 @@
         <script type="module" src="build/script.js" defer></script>
 
         <style>
+            #editor-wrapper {
+                position: relative; /* anchor for the placeholder */
+            }
+
             #text-box {
                 display: flex;
                 flex-direction: column;
                 cursor: text;
                 position: relative;
+                min-height: 10em; /* larger area to click on */
+                min-width: 10em;
             }
 
             #text-box > div {
@@ -51,9 +57,11 @@
     </head>
 
     <body>
-        <div id="text-box" tabindex="0">
-            <div id="placehoder"></div>
-            <div id="line-1">Edit Text</div>
+        <div id="editor-wrapper">
+            <div id="placeholder"></div>
+            <div id="text-box" tabindex="0">
+                <div id="line-1">Edit Text</div>
+            </div>
         </div>
     </body>
 </html>
