@@ -18,9 +18,6 @@ type TextEditorState = {
     selection: Selection;
     savedVerticalCursorIndex: number | null;
     hasWritten : boolean;
-    writtenSinceUndo : boolean;
-    continuing: boolean;
-    moved : boolean;
 };
 
 type EditorMemento = {
@@ -35,6 +32,9 @@ type EditorMemento = {
 type EditorHistory = {
     undoStack: EditorMemento[];
     redoStack: EditorMemento[];
+    writtenSinceUndo : boolean;
+    continuing: boolean;
+    moved : boolean;
 };
 
 const state: TextEditorState = {
@@ -43,9 +43,6 @@ const state: TextEditorState = {
     selection: null,
     savedVerticalCursorIndex: null,
     hasWritten :  false,
-    writtenSinceUndo : false,
-    continuing: false,
-    moved: false,
 };
 type KeyCategory =
     | "movement" | "undo" | "redo" | "paste" | "cut"
@@ -54,6 +51,9 @@ type KeyCategory =
 const history: EditorHistory = {
     undoStack: [],
     redoStack: [],
+    writtenSinceUndo : false,
+    continuing: false,
+    moved: false,
 };
 
 function isArrowKey(key: string){
@@ -100,8 +100,8 @@ function pushToUndo(state: TextEditorState, history: EditorHistory, category: Ke
     }
     const previous : EditorMemento = history.undoStack.at(-1)!;
     if (
-        state.writtenSinceUndo &&
-        state.continuing &&
+        history.writtenSinceUndo &&
+        history.continuing &&
         Date.now() - previous.time < 500 && // 500 ms - 0.5 s
         !["undo", "redo", "paste", "cut"].includes(category) // these should never coalesce
     ) {
@@ -152,12 +152,12 @@ function undo(history: EditorHistory, state: TextEditorState): boolean {
 
     history.redoStack.push(captureMemento(state, "undo"));
     restoreMemento(state, previous);
-    state.writtenSinceUndo = false;
+    history.writtenSinceUndo = false;
     return true;
 }
 
 function redo(history: EditorHistory, state: TextEditorState): boolean {
-    if (state.writtenSinceUndo) {
+    if (history.writtenSinceUndo) {
         history.redoStack = [];
         return false;
     }
@@ -451,8 +451,10 @@ function eventHandler(state: TextEditorState, history: EditorHistory, edit : Edi
     }
     if (!state.hasWritten) return;
 
-    if (history.undoStack.length > 0) state.continuing = category === history.undoStack.at(-1)!.category && !state.moved;
-    state.moved = category === "movement";
+    if (history.undoStack.length > 0) {
+        history.continuing = category === history.undoStack.at(-1)!.category && !history.moved;
+    }
+    history.moved = category === "movement";
 
     if (state.savedVerticalCursorIndex !== null && key !== "ArrowUp" && key !== "ArrowDown") {
         state.savedVerticalCursorIndex = null;
@@ -481,14 +483,14 @@ function eventHandler(state: TextEditorState, history: EditorHistory, edit : Edi
             break;
         case "paste":
             pushToUndo(state, history, category);
-            state.writtenSinceUndo = true;
+            history.writtenSinceUndo = true;
             removeSelectedText(state); // internally checks if text is even being selected
             pasteText(state, key); // key is text to paste when category === "paste"
             break;
         case "cut":
             if (state.selection !== null){
                 pushToUndo(state, history, category);
-                state.writtenSinceUndo = true;
+                history.writtenSinceUndo = true;
                 removeSelectedText(state);
             }
             break;
@@ -498,7 +500,7 @@ function eventHandler(state: TextEditorState, history: EditorHistory, edit : Edi
         case "space":
         case "type":
             pushToUndo(state, history, category);
-            state.writtenSinceUndo = true;
+            history.writtenSinceUndo = true;
             if (state.selection !== null && key !== "Tab") {
                 removeSelectedText(state);
                 if (key !== "Backspace") editText(state, key);
@@ -519,7 +521,7 @@ function copyHandler(e: ClipboardEvent, state: TextEditorState){
     // no need to renderDOM() or pushToUndo()
     if (!e.clipboardData || !state.hasWritten) return;
     e.preventDefault();
-    state.continuing = false;
+    history.continuing = false;
     const text = copySelection(state);
     e.clipboardData.setData("text/plain", text);
 }
