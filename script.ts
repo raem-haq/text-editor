@@ -2,6 +2,10 @@ export {}
 
 const textBox : HTMLDivElement= document.querySelector<HTMLDivElement>("#text-box")!;
 
+const PLACEHOLDER = "Click to edit here";
+const placeholder: HTMLDivElement= document.querySelector<HTMLDivElement>("#placeholder")!;
+placeholder.textContent = PLACEHOLDER;
+
 type Position = {
     line: number;
     column: number;
@@ -175,6 +179,7 @@ function insertInString(s : string, i : number, v : string) : string {
 }
 
 function renderDOM(state: TextEditorState): void {
+    
     textBox.replaceChildren();
     let lineElements : HTMLDivElement[] = [];
     for (const line of state.lines){
