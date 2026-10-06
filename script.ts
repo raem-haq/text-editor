@@ -300,8 +300,9 @@ function moveCursor(state: TextEditorState, key : ArrowKey): void {
     }
 }
 
-function handleTextInput(state: TextEditorState, text: string): void {
-    const {lines, cursor} = state;
+function insertText(state: TextEditorState, text: string): void {
+    const {lines, cursor, selection} = state;
+    if (selection !== null) removeSelectedText(state);
     lines[cursor.line] = insertInString(lines[cursor.line]!, cursor.column, text);
     cursor.column += text.length;
 }
@@ -354,14 +355,13 @@ function handleTab(state: TextEditorState): void {
 }
 
 function pasteText(state: TextEditorState, text : string): void {
-    const lines = text.split("\n");
-    if (!lines) return;
-    handleTextInput(state, lines[0]!);
-    if (lines.length > 1){
-        for (let i = 1; i < lines.length; i++){
-            handleEnter(state);
-            handleTextInput(state, lines[i]!);
-        }
+    if (state.selection !== null) removeSelectedText(state);
+    const linesSplit : string[] = text.split("\n");
+    
+    insertText(state, linesSplit[0]!);
+    for (let i = 1; i < linesSplit.length; i++){
+        handleEnter(state);
+        insertText(state, linesSplit[i]!);
     }
 }
 
@@ -442,11 +442,10 @@ function eventHandler(state: TextEditorState, history: EditorHistory, action : E
         case "insert":
             const {text, paste} = action;
             pushToUndo(state, history, type);
-            removeSelectedText(state); // internally checks if text is even being selected
             if (paste){
-                pasteText(state, text); // key is text to paste when category === "paste"
+                pasteText(state, text);
             } else {
-                handleTextInput(state, text)
+                insertText(state, text)
             }
             break;
         case "backspace":
