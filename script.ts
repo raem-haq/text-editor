@@ -27,7 +27,6 @@ type EditorMemento = {
     lines: string[];
     cursor: Position;
     selection: Selection;
-    category: KeyCategory;
     time: number;
     endBlockCursor: Position;
 };
@@ -35,7 +34,7 @@ type EditorMemento = {
 type EditorHistory = {
     undoStack: EditorMemento[];
     redoStack: EditorMemento[];
-    openBlockCategory: KeyCategory | null;
+    openBlockCategory: BlockCategory | null;
 };
 
 const state: TextEditorState = {
@@ -58,26 +57,43 @@ function isArrowKey(key: string){
     return ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(key);
 }
 
-function pushToUndo(state: TextEditorState, history: EditorHistory, category: KeyCategory): void {
+function actionToBlockCategory(type: ActionType): BlockCategory | null {
+    switch (type){
+        case "backspace":
+        case "enter":
+        case "insert":
+            return type;
+        default:
+            return null;
+    }
+}
+
+function pushToUndo(state: TextEditorState, history: EditorHistory, type: ActionType): void {
     history.redoStack = [];
+
+    const category = actionToBlockCategory(type);
     if (history.undoStack.length === 0) {
-        history.undoStack.push(captureMemento(state, category));
+        history.undoStack.push(captureMemento(state));
+        history.openBlockCategory = category;
         return;
     }
     const previous : EditorMemento = history.undoStack.at(-1)!;
     if (
+        category !== null &&
         history.openBlockCategory === category &&
-        Date.now() - previous.time < 500 // 500 ms - 0.5 s
+        Date.now() - previous.time < 500 && // 500 ms - 0.5 s
+        previous.endBlockCursor === state.cursor
     ) {
         previous.time = Date.now();
         previous.endBlockCursor = {...state.cursor};
         return;
     } else {
-        history.undoStack.push(captureMemento(state, category));
+        history.undoStack.push(captureMemento(state));
+        history.openBlockCategory = category;
     }
 }
 
-function captureMemento(state: TextEditorState, category: KeyCategory): EditorMemento {
+function captureMemento(state: TextEditorState): EditorMemento {
     return {
         lines: [...state.lines],
         cursor: {...state.cursor},
@@ -88,7 +104,6 @@ function captureMemento(state: TextEditorState, category: KeyCategory): EditorMe
                 active: {...state.selection.active},
             },
         time: Date.now(),
-        category: category,
         endBlockCursor: {...state.cursor},
     };
 }
@@ -114,7 +129,7 @@ function undo(history: EditorHistory, state: TextEditorState): boolean {
         return false;
     }
 
-    history.redoStack.push(captureMemento(state, "undo"));
+    history.redoStack.push(captureMemento(state));
     restoreMemento(state, previous);
     history.openBlockCategory = null;
     return true;
@@ -124,7 +139,7 @@ function redo(history: EditorHistory, state: TextEditorState): boolean {
     const next = history.redoStack.pop();
     if (next === undefined) return false;
 
-    history.undoStack.push(captureMemento(state, "redo")); // redos are never coalesced
+    pushToUndo(state, history, "redo");
     restoreMemento(state, next);
     return true;
 }
@@ -243,7 +258,7 @@ function removeAt(value : string, i : number) : string {
 
 
 
-function moveCursor(state: TextEditorState, key : string): boolean {
+function moveCursor(state: TextEditorState, key : ArrowKey): void {
     const {lines, cursor} = state;
 
     switch (key) {
@@ -254,7 +269,6 @@ function moveCursor(state: TextEditorState, key : string): boolean {
                 cursor.line--;
                 cursor.column = lines[cursor.line]!.length;
             }
-            return true;
         case "ArrowRight":
             if (cursor.column < lines[cursor.line]!.length) {
                 cursor.column++;
@@ -262,7 +276,6 @@ function moveCursor(state: TextEditorState, key : string): boolean {
                 cursor.line++;
                 cursor.column = 0;
             }
-            return true;
         case "ArrowUp":
             if (cursor.line > 0) {
                 cursor.line--;
@@ -273,7 +286,6 @@ function moveCursor(state: TextEditorState, key : string): boolean {
             } else {
                 cursor.column = 0;
             }
-            return true;
         case "ArrowDown":
             if (cursor.line < lines.length - 1) {
                 cursor.line++;
@@ -284,9 +296,6 @@ function moveCursor(state: TextEditorState, key : string): boolean {
             } else {
                 cursor.column = lines[cursor.line]!.length;
             }
-            return true;
-        default:
-            return false;
     }
 }
 
@@ -476,6 +485,8 @@ type EditorAction =
     | { type: "cut" }
     | { type: "undo" }
     | { type: "redo" };
+
+type ActionType = EditorAction["type"];
 
 type BlockCategory = "insert" | "backspace" | "enter";
 
