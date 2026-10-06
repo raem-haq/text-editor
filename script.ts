@@ -21,7 +21,6 @@ type TextEditorState = {
     cursor: Position;
     selection: Selection;
     savedVerticalCursorIndex: number | null;
-    hasWritten : boolean;
 };
 
 type EditorMemento = {
@@ -42,11 +41,10 @@ type EditorHistory = {
 };
 
 const state: TextEditorState = {
-    lines: ["Edit Text"],
+    lines: [""],
     cursor: {line: 0, column: 0},
     selection: null,
     savedVerticalCursorIndex: null,
-    hasWritten :  false,
 };
 type KeyCategory =
     | "movement" | "undo" | "redo" | "paste" | "cut"
@@ -446,15 +444,6 @@ function copySelection(state: TextEditorState) : string {
 
 function eventHandler(state: TextEditorState, history: EditorHistory, edit : EditorAction): void {
     const {category, key, shift} = edit;
-    
-
-    const isFirstEdit: boolean = !state.hasWritten && ["enter", "backspace", "type", "tab", "space", "paste"].includes(category);
-    if (isFirstEdit) {
-        state.hasWritten = true;
-        state.lines = [""];
-        state.cursor = {line: 0, column: 0};
-    }
-    if (!state.hasWritten) return;
 
     if (history.undoStack.length > 0) {
         history.continuing = category === history.undoStack.at(-1)!.category && !history.moved;
@@ -524,7 +513,7 @@ function eventHandler(state: TextEditorState, history: EditorHistory, edit : Edi
 function copyHandler(e: ClipboardEvent, state: TextEditorState){ 
     // doesn't modify DOM variables
     // no need to renderDOM() or pushToUndo()
-    if (!e.clipboardData || !state.hasWritten) return;
+    if (!e.clipboardData) return;
     e.preventDefault();
     history.continuing = false;
     const text = copySelection(state);
