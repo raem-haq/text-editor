@@ -43,9 +43,6 @@ const state: TextEditorState = {
     selection: null,
     savedVerticalCursorIndex: null,
 };
-type KeyCategory =
-    | "movement" | "undo" | "redo" | "paste" | "cut"
-    | "enter" | "backspace" | "type" | "other" | "tab" | "space";
 
 const history: EditorHistory = {
     undoStack: [],
@@ -62,6 +59,7 @@ function actionToBlockCategory(type: ActionType): BlockCategory | null {
         case "backspace":
         case "enter":
         case "insert":
+        case "tab":
             return type;
         default:
             return null;
@@ -117,7 +115,6 @@ function restoreMemento(state: TextEditorState, memento: EditorMemento): void {
             anchor: {...memento.selection.anchor},
             active: {...memento.selection.active},
         };
-    //state.hasWritten = memento.hasWritten;
     state.savedVerticalCursorIndex = null;
 }
 
@@ -269,6 +266,7 @@ function moveCursor(state: TextEditorState, key : ArrowKey): void {
                 cursor.line--;
                 cursor.column = lines[cursor.line]!.length;
             }
+            break;
         case "ArrowRight":
             if (cursor.column < lines[cursor.line]!.length) {
                 cursor.column++;
@@ -276,6 +274,7 @@ function moveCursor(state: TextEditorState, key : ArrowKey): void {
                 cursor.line++;
                 cursor.column = 0;
             }
+            break;
         case "ArrowUp":
             if (cursor.line > 0) {
                 cursor.line--;
@@ -286,6 +285,7 @@ function moveCursor(state: TextEditorState, key : ArrowKey): void {
             } else {
                 cursor.column = 0;
             }
+            break;
         case "ArrowDown":
             if (cursor.line < lines.length - 1) {
                 cursor.line++;
@@ -296,16 +296,20 @@ function moveCursor(state: TextEditorState, key : ArrowKey): void {
             } else {
                 cursor.column = lines[cursor.line]!.length;
             }
+            break;
     }
 }
 
-function handleText(state: TextEditorState, text: string): void {
+function handleTextInput(state: TextEditorState, text: string): void {
     const {lines, cursor} = state;
     lines[cursor.line] = insertInString(lines[cursor.line]!, cursor.column, text);
     cursor.column += text.length;
 }
 
 function handleEnter(state: TextEditorState){
+    if (state.selection !== null) {
+        removeSelectedText(state);
+    }
     const {lines, cursor} = state;
     const currentLine = lines[cursor.line]!;
     const newLineText = currentLine.slice(cursor.column);
@@ -317,49 +321,46 @@ function handleEnter(state: TextEditorState){
     cursor.column = 0;
 }
 
-function editText(state: TextEditorState, key : string): void {
-    console.log("Entering "+ key);
+function handleBackspace(state: TextEditorState){
+    if (state.selection !== null){
+        removeSelectedText(state);
+        return;
+    }
+
     const {lines, cursor} = state;
-    switch (key) {
-        case "enter": {
-            handleEnter(state);
-            break;
-        }
-        case "backspace":
-            if (cursor.column > 0) {
-                lines[cursor.line] = removeAt(lines[cursor.line]!, cursor.column - 1);
-                cursor.column--;
-            } else if (cursor.line > 0) {
-                const previousLineNo = cursor.line - 1;
-                cursor.column = lines[previousLineNo]!.length;
-                lines[previousLineNo] += lines[cursor.line]!;
-                lines.splice(cursor.line, 1);
-                cursor.line = previousLineNo;
-            }
-            break;
-        case "tab":
-            if (state.selection !== null){
-                manageTabsSelection(state);
-            } else {
-            const noOfSpaces = 4 - cursor.column % 4;
-            lines[cursor.line] = insertInString(
-                lines[cursor.line]!, cursor.column, " ".repeat(noOfSpaces));
-            cursor.column += noOfSpaces;
-            }
-            break;
-        default:
-            if (key.length === 1) handleText(state, key);
+
+    if (cursor.column > 0) {
+        lines[cursor.line] = removeAt(lines[cursor.line]!, cursor.column - 1);
+        cursor.column--;
+    } else if (cursor.line > 0) {
+        const previousLineNo = cursor.line - 1;
+        cursor.column = lines[previousLineNo]!.length;
+        lines[previousLineNo] += lines[cursor.line]!;
+        lines.splice(cursor.line, 1);
+        cursor.line = previousLineNo;
+    }
+}
+
+function handleTab(state: TextEditorState): void {
+    const {lines, cursor} = state;
+    if (state.selection !== null){
+        manageTabsSelection(state);
+    } else {
+        const noOfSpaces = 4 - cursor.column % 4;
+        lines[cursor.line] = insertInString(
+            lines[cursor.line]!, cursor.column, " ".repeat(noOfSpaces));
+        cursor.column += noOfSpaces;
     }
 }
 
 function pasteText(state: TextEditorState, text : string): void {
     const lines = text.split("\n");
     if (!lines) return;
-    handleText(state, lines[0]!);
+    handleTextInput(state, lines[0]!);
     if (lines.length > 1){
         for (let i = 1; i < lines.length; i++){
             handleEnter(state);
-            handleText(state, lines[i]!);
+            handleTextInput(state, lines[i]!);
         }
     }
 }
@@ -386,7 +387,7 @@ function removeSelectedText(state: TextEditorState) : void {
 }
 
 function copySelection(state: TextEditorState) : string {
-    const selection : Selection = state.selection;
+    const {selection} = state;
 
     if (selection === null) return "";
     let {anchor: start, active: end} = selection;
@@ -419,7 +420,7 @@ function eventHandler(state: TextEditorState, history: EditorHistory, action : E
             const {key, shift} = action;
             if (key !== "ArrowUp" && key !== "ArrowDown") state.savedVerticalCursorIndex = null;
 
-            if (state.selection === null && (shift && isArrowKey(key))) {
+            if (state.selection === null && shift) {
                 state.selection = {anchor: {...state.cursor}, active: {...state.cursor}};
             }
 
@@ -445,18 +446,20 @@ function eventHandler(state: TextEditorState, history: EditorHistory, action : E
             if (paste){
                 pasteText(state, text); // key is text to paste when category === "paste"
             } else {
-                editText(state, text)
+                handleTextInput(state, text)
             }
             break;
         case "backspace":
+            pushToUndo(state, history, type);
+            handleBackspace(state);
+            break;
         case "enter":
+            pushToUndo(state, history, type);
+            handleEnter(state);
+            break;
         case "tab":
-            if (state.selection !== null && type !== "tab") {
-                removeSelectedText(state);
-                if (type !== "backspace") editText(state, type);
-            } else {
-                editText(state, type);
-            }
+            pushToUndo(state, history, type);
+            handleTab(state);
             break;
     }
     renderDOM(state);
@@ -472,7 +475,6 @@ function copyHandler(e: ClipboardEvent, state: TextEditorState){
 }
 
 
-textBox.addEventListener("copy", (event) => copyHandler(event, state));
 
 type ArrowKey = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
 
@@ -488,7 +490,7 @@ type EditorAction =
 
 type ActionType = EditorAction["type"];
 
-type BlockCategory = "insert" | "backspace" | "enter";
+type BlockCategory = "insert" | "backspace" | "enter" | "tab";
 
 function keyToAction(event: KeyboardEvent): EditorAction | null {
     const key = event.key;
@@ -518,6 +520,9 @@ function keyToAction(event: KeyboardEvent): EditorAction | null {
     }
 }
 
+
+textBox.addEventListener("copy", (event) => copyHandler(event, state));
+
 textBox.addEventListener("keydown", (event) => {
     const action: EditorAction | null = keyToAction(event);
     if (action === null) return;
@@ -540,7 +545,7 @@ textBox.addEventListener("paste", (event) => {
 
     const e: EditorAction = {
         type: "insert",
-        text: "text",
+        text: text,
         paste: true,
     }
     eventHandler(state, history, e);
