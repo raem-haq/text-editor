@@ -58,39 +58,6 @@ function isArrowKey(key: string){
     return ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(key);
 }
 
-function keyCategory(event: KeyboardEvent): KeyCategory {
-    const key = event.key;
-    const keyCheck = key.toLowerCase();
-    if (isArrowKey(key)) return "movement";
-
-    const isMac = navigator.platform.toUpperCase().includes("MAC");
-    const isUndo = isMac
-        ? event.metaKey && keyCheck === "z" && !event.shiftKey
-        : event.ctrlKey && keyCheck === "z";
-    if (isUndo) return "undo";
-    
-    const isRedo = isMac
-        ? event.metaKey && keyCheck === "z" && event.shiftKey
-        : event.ctrlKey && keyCheck === "y";
-    if (isRedo) return "redo";
-
-    if (event.metaKey || event.ctrlKey) return "other";
-
-    switch (keyCheck) {
-        case "paste":
-        case "cut":
-        case "enter":
-        case "backspace":
-        case "tab":
-            return keyCheck;
-        case " ":
-        case "spacebar":
-            return "space";
-        default:
-            return key.length === 1 ? "type" : "other";
-    }
-}
-
 function pushToUndo(state: TextEditorState, history: EditorHistory, category: KeyCategory): void {
     history.redoStack = [];
     if (history.undoStack.length === 0) {
@@ -433,20 +400,23 @@ function copySelection(state: TextEditorState) : string {
     return copyText;
 }
 
-function eventHandler(state: TextEditorState, history: EditorHistory, edit : EditorAction): void {
-    const {category, key, shift} = edit;
+function eventHandler(state: TextEditorState, history: EditorHistory, action : EditorAction): void {
 
-    if (!["undo", "redo", "movement"].includes(category)) history.redoStack = [];
+    switch (action.type){
+        case "move":
+            const {key, shift} = action;
+            if (state.savedVerticalCursorIndex !== null && key !== "ArrowUp" && key !== "ArrowDown") {
+                state.savedVerticalCursorIndex = null;
+            }
 
-    history.openBlockCategory = ["backspace", "enter", "tab", "space", "type"].includes(category) ? category : null;
+            if (state.selection === null && (shift && isArrowKey(key))) {
+                state.selection = {anchor: {...state.cursor}, active: {...state.cursor}};
+            }
 
-    if (state.savedVerticalCursorIndex !== null && key !== "ArrowUp" && key !== "ArrowDown") {
-        state.savedVerticalCursorIndex = null;
     }
 
-    if (state.selection !== null && (shift && isArrowKey(key))) {
-        state.selection = {anchor: {...state.cursor}, active: {...state.cursor}};
-    }
+
+    
 
 
     switch (category){
@@ -508,36 +478,60 @@ function copyHandler(e: ClipboardEvent, state: TextEditorState){
 
 textBox.addEventListener("copy", (event) => copyHandler(event, state));
 
-type EditorAction = {category: KeyCategory; key: string; shift: boolean; ctrl: boolean; meta: boolean }
+type ArrowKey = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
+
+type EditorAction =
+    | { type: "move"; key: ArrowKey; shift: boolean }
+    | { type: "insert"; text: string; paste: boolean }  // typing, space, paste
+    | { type: "enter" }
+    | { type: "backspace" }
+    | { type: "tab" }
+    | { type: "cut" }
+    | { type: "undo" }
+    | { type: "redo" };
+
+type BlockCategory = "insert" | "backspace" | "enter";
+
+function keyToAction(event: KeyboardEvent): EditorAction | null {
+    const key = event.key;
+    const k = key.toLowerCase();
+    const isMac = navigator.platform.toUpperCase().includes("MAC");
+
+    const isUndo = isMac
+        ? event.metaKey && k === "z" && !event.shiftKey
+        : event.ctrlKey && k === "z"; // allows ctrl+shift+z on windows, maybe other sticky keys shouldn't match
+    if (isUndo) return {type: "undo"};
+    
+    const isRedo = isMac
+        ? event.metaKey && k === "z" && event.shiftKey
+        : event.ctrlKey && k === "y";
+    if (isRedo) return {type: "redo"};
+
+
+    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(key)){
+        return { type: "move", key: key as ArrowKey, shift: event.shiftKey };
+    }
+    switch (key) {
+        case "Enter":     return { type: "enter" };
+        case "Backspace": return { type: "backspace" };
+        case "Tab":       return { type: "tab" };
+        default:
+            return key.length === 1 ? { type: "insert", text: key, paste: false } : null;
+    }
+}
 
 textBox.addEventListener("keydown", (event) => {
-    const category = keyCategory(event);
-    if (category === "other") {
-        console.log(event.key);
-        return;
-    }
+    const action: EditorAction | null = keyToAction(event);
+    if (action === null) return;
     event.preventDefault();
-    const e: EditorAction = {
-        category: category,
-        key: event.key === "Spacebar" ? " " : event.key,
-        shift: event.shiftKey,
-        ctrl: event.ctrlKey,
-        meta: event.metaKey,
-    }
-    eventHandler(state, history, e);
+    eventHandler(state, history, action);
 });
 
 
 textBox.addEventListener("cut", (event) => {
     copyHandler(event, state);
-    const e: EditorAction = {
-        category: "cut",
-        key: "cut",
-        shift: false,
-        ctrl: false,
-        meta: false,
-    }
-    eventHandler(state, history, e);
+    if (state.selection === null) return;
+    eventHandler(state, history, {type: "cut"});
 });
 
 
@@ -547,13 +541,10 @@ textBox.addEventListener("paste", (event) => {
     const text = event.clipboardData.getData("text/plain");
 
     const e: EditorAction = {
-        category: "paste",
-        key: text,
-        shift: false,
-        ctrl: false,
-        meta: false,
+        type: "insert",
+        text: "text",
+        paste: true,
     }
-
     eventHandler(state, history, e);
 });
 
