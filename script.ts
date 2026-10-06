@@ -92,6 +92,7 @@ function keyCategory(event: KeyboardEvent): KeyCategory {
 }
 
 function pushToUndo(state: TextEditorState, history: EditorHistory, category: KeyCategory): void {
+    history.redoStack = [];
     if (history.undoStack.length === 0) {
         history.undoStack.push(captureMemento(state, category));
         return;
