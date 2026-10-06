@@ -10,12 +10,24 @@
             #text-box {
                 display: flex;
                 flex-direction: column;
+                cursor: text;
+                position: relative;
             }
 
             #text-box > div {
                 white-space: pre-wrap;
                 min-height: 1.2em;
             }
+            
+            #placeholder {
+                position: absolute;
+                color: #999;
+                font-style: italic;
+                pointer-events: none; /* clicks fall through to the editor */
+            }
+
+
+            #text-box.is-empty
 
             .cursor {
                 display: inline-block;
@@ -40,6 +52,7 @@
 
     <body>
         <div id="text-box" tabindex="0">
+            <div id="placehoder"></div>
             <div id="line-1">Edit Text</div>
         </div>
     </body>
