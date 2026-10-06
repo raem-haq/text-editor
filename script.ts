@@ -15,10 +15,8 @@ type Selection = {
 type TextEditorState = {
     lines: string[];
     cursor: Position;
-    selecting: boolean;
     selection: Selection;
     savedVerticalCursorIndex: number | null;
-    verticalMovement: boolean;
     hasWritten : boolean;
     writtenSinceUndo : boolean;
     continuing: boolean;
@@ -28,7 +26,6 @@ type TextEditorState = {
 type EditorMemento = {
     lines: string[];
     cursor: Position;
-    selecting: boolean;
     selection: Selection;
     category: KeyCategory;
     time: number;
@@ -43,10 +40,8 @@ type EditorHistory = {
 const state: TextEditorState = {
     lines: ["Edit Text"],
     cursor: {line: 0, column: 0},
-    selecting : false,
     selection: null,
     savedVerticalCursorIndex: null,
-    verticalMovement: false,
     hasWritten :  false,
     writtenSinceUndo : false,
     continuing: false,
@@ -111,7 +106,7 @@ function pushToUndo(state: TextEditorState, history: EditorHistory, category: Ke
         !["undo", "redo", "paste", "cut"].includes(category) // these should never coalesce
     ) {
         previous.time = Date.now();
-        previous.endBlockCursor = state.cursor;
+        previous.endBlockCursor = {...state.cursor};
         return;
     } else {
         history.undoStack.push(captureMemento(state, category));
@@ -122,7 +117,6 @@ function captureMemento(state: TextEditorState, category: KeyCategory): EditorMe
     return {
         lines: [...state.lines],
         cursor: {...state.cursor},
-        selecting: state.selecting,
         selection: state.selection === null
             ? null
             : {
@@ -138,7 +132,6 @@ function captureMemento(state: TextEditorState, category: KeyCategory): EditorMe
 function restoreMemento(state: TextEditorState, memento: EditorMemento): void {
     state.lines = [...memento.lines];
     state.cursor = {...memento.cursor};
-    state.selecting = memento.selecting;
     state.selection = memento.selection === null
         ? null
         : {
@@ -146,7 +139,6 @@ function restoreMemento(state: TextEditorState, memento: EditorMemento): void {
             active: {...memento.selection.active},
         };
     //state.hasWritten = memento.hasWritten;
-    state.verticalMovement = false;
     state.savedVerticalCursorIndex = null;
 }
 
@@ -264,8 +256,7 @@ function manageTabsSelection(state: TextEditorState){
     if (start.line == end.line){
         const line = state.lines[start.line]!;
         const noOfSpaces = 4 - start.column % 4;
-        state.lines[start.line] = line.slice(0, start.column).concat(" ".repeat(noOfSpaces)).concat(line.slice(end.column))
-        state.selecting = false;
+        state.lines[start.line] = line.slice(0, start.column).concat(" ".repeat(noOfSpaces)).concat(line.slice(end.column));
         state.selection = null;
         state.cursor.column = start.column + noOfSpaces;
     } else {
@@ -314,8 +305,7 @@ function moveCursor(state: TextEditorState, key : string): boolean {
         case "ArrowUp":
             if (cursor.line > 0) {
                 cursor.line--;
-                if (!state.verticalMovement) {
-                    state.verticalMovement = true;
+                if (state.savedVerticalCursorIndex === null) {
                     state.savedVerticalCursorIndex = cursor.column;
                 }
                 cursor.column = Math.min(state.savedVerticalCursorIndex!, lines[cursor.line]!.length);
@@ -326,8 +316,7 @@ function moveCursor(state: TextEditorState, key : string): boolean {
         case "ArrowDown":
             if (cursor.line < lines.length - 1) {
                 cursor.line++;
-                if (!state.verticalMovement) {
-                    state.verticalMovement = true;
+                if (state.savedVerticalCursorIndex === null) {
                     state.savedVerticalCursorIndex = cursor.column;
                 }
                 cursor.column = Math.min(state.savedVerticalCursorIndex!, lines[cursor.line]!.length);
@@ -379,7 +368,7 @@ function editText(state: TextEditorState, key : string): void {
             }
             break;
         case "Tab":
-            if (state.selecting && state.selection !== null){
+            if (state.selection !== null){
                 manageTabsSelection(state);
             } else {
             const noOfSpaces = 4 - cursor.column % 4;
@@ -407,7 +396,7 @@ function pasteText(state: TextEditorState, text : string): void {
 
 function removeSelectedText(state: TextEditorState) : void {
     const selection : Selection = state.selection;
-    if (!state.selecting || selection === null) return;
+    if (selection === null) return;
     let {anchor: start, active: end} = selection;
 
     if (start.line > end.line || (start.line == end.line && start.column > end.column)){
@@ -424,7 +413,6 @@ function removeSelectedText(state: TextEditorState) : void {
     }
     state.cursor = {...start};
     state.selection = null;
-    state.selecting = false;
 }
 
 function copySelection(state: TextEditorState) : string {
@@ -466,14 +454,11 @@ function eventHandler(state: TextEditorState, history: EditorHistory, edit : Edi
     if (history.undoStack.length > 0) state.continuing = category === history.undoStack.at(-1)!.category && !state.moved;
     state.moved = category === "movement";
 
-    if (state.verticalMovement && key !== "ArrowUp" && key !== "ArrowDown") {
-        state.verticalMovement = false;
+    if (state.savedVerticalCursorIndex !== null && key !== "ArrowUp" && key !== "ArrowDown") {
+        state.savedVerticalCursorIndex = null;
     }
 
-    if (!state.selecting){
-        state.selecting = (shift && isArrowKey(key));
-    }
-    if (state.selecting && state.selection === null) {
+    if (state.selection !== null && (shift && isArrowKey(key))) {
         state.selection = {anchor: {...state.cursor}, active: {...state.cursor}};
     }
 
@@ -487,13 +472,11 @@ function eventHandler(state: TextEditorState, history: EditorHistory, edit : Edi
             break;
         case "movement":
             if (!shift){
-                state.selecting = false;
+                state.selection = null;
             }
             moveCursor(state, key);
-            if (state.selecting && state.selection !== null) {
+            if (state.selection !== null) {
                 state.selection.active = {...state.cursor};
-            } else if (!state.selecting) {
-                state.selection = null;
             }
             break;
         case "paste":
@@ -503,7 +486,7 @@ function eventHandler(state: TextEditorState, history: EditorHistory, edit : Edi
             pasteText(state, key); // key is text to paste when category === "paste"
             break;
         case "cut":
-            if (state.selecting && state.selection !== null){
+            if (state.selection !== null){
                 pushToUndo(state, history, category);
                 state.writtenSinceUndo = true;
                 removeSelectedText(state);
@@ -516,16 +499,16 @@ function eventHandler(state: TextEditorState, history: EditorHistory, edit : Edi
         case "type":
             pushToUndo(state, history, category);
             state.writtenSinceUndo = true;
-            if (state.selecting && state.selection !== null && key !== "Tab") {
+            if (state.selection !== null && key !== "Tab") {
                 removeSelectedText(state);
                 if (key !== "Backspace") editText(state, key);
             } else {
                 editText(state, key);
             }
             break;
-        default:
+        case "other":
             console.log(key);
-            throw new Error("Key: " + key + " is not recognised and made it passed keyCategory.");
+            throw new Error("Key: " + key + " is not recognised and made it to switch.");
     }
     renderDOM(state);
 }
