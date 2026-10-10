@@ -104,20 +104,16 @@ function timeHandler(state: TextEditorState, history: EditorHistory, action : Ed
     switch (type){
         case "move":
             returnRows.push(benchmarkCall(state, action, "handleMovement", () => handleMovement(state, action.key, action.shift)));
-            returnRows.push(benchmarkCall(state, action, "renderDOM", () => renderDOM(state)));
             break;
         case "undo":
             returnRows.push(benchmarkCall(state, action, "undo", () => undo(history, state)));
-            returnRows.push(benchmarkCall(state, action, "renderDOM", () => renderDOM(state)));
             break;
         case "redo":
-            returnRows.push(benchmarkCall(state, action, "redo", () => redo(history, state)));
-            returnRows.push(benchmarkCall(state, action, "renderDOM", () => renderDOM(state)));
+            returnRows.push(benchmarkCall(state, action, "redo", () => redo(history, state)));;
             break;
         case "cut":
             returnRows.push(benchmarkCall(state, action, "pushToUndo", () => pushToUndo(state, history, type)));
             returnRows.push(benchmarkCall(state, action, "removeSelectedText", () => removeSelectedText(state)));
-            returnRows.push(benchmarkCall(state, action, "renderDOM", () => renderDOM(state)));
             break;
         case "insert":
             const {text, paste} = action;
@@ -127,23 +123,51 @@ function timeHandler(state: TextEditorState, history: EditorHistory, action : Ed
             } else {
                 returnRows.push(benchmarkCall(state, action, "insertText", () => insertText(state, text)));
             }
-            returnRows.push(benchmarkCall(state, action, "renderDOM", () => renderDOM(state)));
             break;
         case "backspace":
             returnRows.push(benchmarkCall(state, action, "pushToUndo", () => pushToUndo(state, history, type)));
             returnRows.push(benchmarkCall(state, action, "handleBackspace", () => handleBackspace(state)));
-            returnRows.push(benchmarkCall(state, action, "renderDOM", () => renderDOM(state)));
             break;
         case "enter":
             returnRows.push(benchmarkCall(state, action, "pushToUndo", () => pushToUndo(state, history, type)));
             returnRows.push(benchmarkCall(state, action, "handleEnter", () => handleEnter(state)));
-            returnRows.push(benchmarkCall(state, action, "renderDOM", () => renderDOM(state)));
             break;
         case "tab":
             returnRows.push(benchmarkCall(state, action, "pushToUndo", () => pushToUndo(state, history, type)));
             returnRows.push(benchmarkCall(state, action, "handleTab", () => handleTab(state)));
-            returnRows.push(benchmarkCall(state, action, "renderDOM", () => renderDOM(state)));
             break;
     }
+    returnRows.push(benchmarkCall(state, action, "renderDOM", () => renderDOM(state)));
     return returnRows;
 }
+
+
+function writeCSV(rows: BenchmarkRow[]): void {
+    if (rows.length === 0) return;
+
+    const headers = Object.keys(rows[0]!) as (keyof BenchmarkRow)[];
+
+    const escapeCSV = (value: unknown): string =>
+        `"${String(value ?? "").replace(/"/g, '""')}"`;
+
+    const csv = [
+        headers.map(escapeCSV).join(","),
+        ...rows.map(row =>
+            headers.map(header => escapeCSV(row[header])).join(",")
+        )
+    ].join("\r\n");
+
+    const blob = new Blob([csv], {
+        type: "text/csv;charset=utf-8;"
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = "benchmark.csv";
+    link.click();
+
+    URL.revokeObjectURL(url);
+}
+
