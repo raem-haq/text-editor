@@ -11,7 +11,7 @@ type Position = {
     column: number;
 };
 
-type Selection = {
+export type Selection = {
     anchor: Position;
     active: Position;
 } | null;
@@ -37,29 +37,6 @@ export type EditorHistory = {
     openBlockCategory: BlockCategory | null;
 };
 
-function isValidPosition(pos: Position, lines: string[]){
-    const {line, column} = pos; 
-    return line > 0 && line < lines.length &&
-        column > 0 && column < lines[line]!.length
-}
-
-function modifyStateDirectly(new_state: TextEditorState): boolean {
-    const {lines} = new_state;
-    history.openBlockCategory = null;
-    state.lines = {...lines};
-    if (!isValidPosition(new_state.cursor, lines)){
-        return false;
-    }
-    state.cursor = {...new_state.cursor};
-    if (new_state.selection !== null &&
-        (!isValidPosition(new_state.selection!.anchor, lines) ||
-        !isValidPosition(new_state.selection.active, lines))){
-            return false;
-        }
-    state.selection = new_state.selection === null ? null : {...new_state.selection};
-    state.savedVerticalCursorIndex = new_state.savedVerticalCursorIndex;
-    return true;
-}
 
 const state: TextEditorState = {
     lines: [""],
