@@ -1,7 +1,5 @@
 export {}
 
-const CSV_FILE_NAME : string = "baseline.csv"
-
 import {
     TextEditorState,
     EditorHistory,
@@ -20,6 +18,9 @@ import {
     undo,
     redo
 } from "./script.js";
+
+const IMPLEMENTATION: string = "baseline";
+const CSV_FILE_NAME : string = IMPLEMENTATION + ".csv";
 
 const state: TextEditorState = {
     lines: [""],
@@ -44,9 +45,9 @@ function timeFunction(func: () => any): number {
 }
 
 type BenchmarkRow = {
+  implementation: string;
   operation: string;
   functionName: string;
-  payload: string | null;
   durationMS: number;
   cursorIndex: number;
   documentChars: number;
@@ -55,6 +56,13 @@ type BenchmarkRow = {
   payloadLength: number;
   selectionLength: number;
   timestamp: number;
+};
+
+type BenchmarkContext = {
+    implementation: string;
+    documentChars: number;
+    documentLines: number;
+    payloadLength: number;
 };
 
 function lengthOfSelection(selection: Selection): number {
@@ -79,29 +87,35 @@ function lengthOfSelection(selection: Selection): number {
     return total;
 }
 
-function benchmarkCall(state: TextEditorState, action: EditorAction, functionName: string, fn: () => void,): BenchmarkRow {
+function benchmarkCall(context: BenchmarkContext, state: TextEditorState, 
+    action: EditorAction, functionName: string, fn: () => void): BenchmarkRow {
   const payload = action.type === "insert" ? action.text : null;
 
   const currentLine = state.lines[state.cursor.line] ?? "";
 
-  const row: BenchmarkRow = {
-    operation: action.type,
+  const {implementation, documentChars, documentLines, payloadLength} = context;
+
+  return {
+    implementation,
+    documentChars,
+    documentLines,
+    payloadLength,
+    operation: action.type as string,
     functionName,
-    payload,
     durationMS: timeFunction(fn),
     cursorIndex: state.cursor.column,
     currentLineChars: currentLine.length,
-    documentChars: state.lines.reduce((total, line) => total + line.length, 0),
-    documentLines: state.lines.length,
-    payloadLength: payload ? payload.length : 0,
     selectionLength: lengthOfSelection(state.selection),
     timestamp: Date.now(),
   };
-
-  return row;
 }
 
-function timeHandler(state: TextEditorState, history: EditorHistory, action : EditorAction): BenchmarkRow[] {
+function timeHandler(
+    context: BenchmarkContext,
+    state: TextEditorState,
+    history: EditorHistory,
+    action : EditorAction,
+): BenchmarkRow[] {
     const returnRows : BenchmarkRow[] = [];
     const {type} = action;
 
@@ -109,41 +123,41 @@ function timeHandler(state: TextEditorState, history: EditorHistory, action : Ed
 
     switch (type){
         case "move":
-            returnRows.push(benchmarkCall(state, action, "handleMovement", () => handleMovement(state, action.key, action.shift)));
+            returnRows.push(benchmarkCall(context, state, action, "handleMovement", () => handleMovement(state, action.key, action.shift)));
             break;
         case "undo":
-            returnRows.push(benchmarkCall(state, action, "undo", () => undo(history, state)));
+            returnRows.push(benchmarkCall(context, state, action, "undo", () => undo(history, state)));
             break;
         case "redo":
-            returnRows.push(benchmarkCall(state, action, "redo", () => redo(history, state)));;
+            returnRows.push(benchmarkCall(context, state, action, "redo", () => redo(history, state)));;
             break;
         case "cut":
-            returnRows.push(benchmarkCall(state, action, "pushToUndo", () => pushToUndo(state, history, type)));
-            returnRows.push(benchmarkCall(state, action, "removeSelectedText", () => removeSelectedText(state)));
+            returnRows.push(benchmarkCall(context, state, action, "pushToUndo", () => pushToUndo(state, history, type)));
+            returnRows.push(benchmarkCall(context, state, action, "removeSelectedText", () => removeSelectedText(state)));
             break;
         case "insert":
             const {text, paste} = action;
-            returnRows.push(benchmarkCall(state, action, "pushToUndo", () => pushToUndo(state, history, type)));
+            returnRows.push(benchmarkCall(context, state, action, "pushToUndo", () => pushToUndo(state, history, type)));
             if (paste){
-                returnRows.push(benchmarkCall(state, action, "pasteText", () => pasteText(state, text)));
+                returnRows.push(benchmarkCall(context, state, action, "pasteText", () => pasteText(state, text)));
             } else {
-                returnRows.push(benchmarkCall(state, action, "insertText", () => insertText(state, text)));
+                returnRows.push(benchmarkCall(context, state, action, "insertText", () => insertText(state, text)));
             }
             break;
         case "backspace":
-            returnRows.push(benchmarkCall(state, action, "pushToUndo", () => pushToUndo(state, history, type)));
-            returnRows.push(benchmarkCall(state, action, "handleBackspace", () => handleBackspace(state)));
+            returnRows.push(benchmarkCall(context, state, action, "pushToUndo", () => pushToUndo(state, history, type)));
+            returnRows.push(benchmarkCall(context, state, action, "handleBackspace", () => handleBackspace(state)));
             break;
         case "enter":
-            returnRows.push(benchmarkCall(state, action, "pushToUndo", () => pushToUndo(state, history, type)));
-            returnRows.push(benchmarkCall(state, action, "handleEnter", () => handleEnter(state)));
+            returnRows.push(benchmarkCall(context, state, action, "pushToUndo", () => pushToUndo(state, history, type)));
+            returnRows.push(benchmarkCall(context, state, action, "handleEnter", () => handleEnter(state)));
             break;
         case "tab":
-            returnRows.push(benchmarkCall(state, action, "pushToUndo", () => pushToUndo(state, history, type)));
-            returnRows.push(benchmarkCall(state, action, "handleTab", () => handleTab(state)));
+            returnRows.push(benchmarkCall(context, state, action, "pushToUndo", () => pushToUndo(state, history, type)));
+            returnRows.push(benchmarkCall(context, state, action, "handleTab", () => handleTab(state)));
             break;
     }
-    returnRows.push(benchmarkCall(state, action, "renderDOM", () => renderDOM(state)));
+    returnRows.push(benchmarkCall(context, state, action, "renderDOM", () => renderDOM(state)));
     return returnRows;
 }
 
@@ -428,10 +442,14 @@ const actions: EditorAction[] = [
 ];
 
 const rows: BenchmarkRow[] = [];
-for (let i = 0; i < 3; i++){
-    for (const action of actions) {
-        rows.push(...timeHandler(state, history, action));
-    }
+const context : BenchmarkContext = {
+    implementation: IMPLEMENTATION,
+    documentChars: state.lines.reduce((total, line) => total + line.length, 0),
+    documentLines: state.lines.length,
+    payloadLength: 0,
+};
+for (const action of actions) {
+    rows.push(...timeHandler(context, state, history, action));
 }
 writeCSV(rows);
 
