@@ -16,7 +16,7 @@ type Selection = {
     active: Position;
 } | null;
 
-type TextEditorState = {
+export type TextEditorState = {
     lines: string[];
     cursor: Position;
     selection: Selection;
@@ -31,11 +31,35 @@ type EditorMemento = {
     endBlockCursor: Position;
 };
 
-type EditorHistory = {
+export type EditorHistory = {
     undoStack: EditorMemento[];
     redoStack: EditorMemento[];
     openBlockCategory: BlockCategory | null;
 };
+
+function isValidPosition(pos: Position, lines: string[]){
+    const {line, column} = pos; 
+    return line > 0 && line < lines.length &&
+        column > 0 && column < lines[line]!.length
+}
+
+function modifyStateDirectly(new_state: TextEditorState): boolean {
+    const {lines} = new_state;
+    history.openBlockCategory = null;
+    state.lines = {...lines};
+    if (!isValidPosition(new_state.cursor, lines)){
+        return false;
+    }
+    state.cursor = {...new_state.cursor};
+    if (new_state.selection !== null &&
+        (!isValidPosition(new_state.selection!.anchor, lines) ||
+        !isValidPosition(new_state.selection.active, lines))){
+            return false;
+        }
+    state.selection = new_state.selection === null ? null : {...new_state.selection};
+    state.savedVerticalCursorIndex = new_state.savedVerticalCursorIndex;
+    return true;
+}
 
 const state: TextEditorState = {
     lines: [""],
@@ -62,7 +86,7 @@ function actionToBlockCategory(type: ActionType): BlockCategory | null {
     }
 }
 
-function pushToUndo(state: TextEditorState, history: EditorHistory, type: ActionType): void {
+export function pushToUndo(state: TextEditorState, history: EditorHistory, type: ActionType): void {
     history.redoStack = [];
 
     const category = actionToBlockCategory(type);
@@ -115,7 +139,7 @@ function restoreMemento(state: TextEditorState, memento: EditorMemento): void {
 }
 
 
-function undo(history: EditorHistory, state: TextEditorState): boolean {
+export function undo(history: EditorHistory, state: TextEditorState): boolean {
     const previous = history.undoStack.pop();
     if (previous === undefined) {
         return false;
@@ -127,7 +151,7 @@ function undo(history: EditorHistory, state: TextEditorState): boolean {
     return true;
 }
 
-function redo(history: EditorHistory, state: TextEditorState): boolean {
+export function redo(history: EditorHistory, state: TextEditorState): boolean {
     const next = history.redoStack.pop();
     if (next === undefined) return false;
 
@@ -141,7 +165,7 @@ function insertInString(s : string, i : number, v : string) : string {
     return s.slice(0, i) + v + s.slice(i);
 }
 
-function renderDOM(state: TextEditorState): void {
+export function renderDOM(state: TextEditorState): void {
     placeholder.hidden = !(state.lines.length === 1 && state.lines[0] === "");
     textBox.replaceChildren();
     let lineElements : HTMLDivElement[] = [];
@@ -295,14 +319,14 @@ function moveCursor(state: TextEditorState, key : ArrowKey): void {
     }
 }
 
-function insertText(state: TextEditorState, text: string): void {
+export function insertText(state: TextEditorState, text: string): void {
     const {lines, cursor, selection} = state;
     if (selection !== null) removeSelectedText(state);
     lines[cursor.line] = insertInString(lines[cursor.line]!, cursor.column, text);
     cursor.column += text.length;
 }
 
-function handleEnter(state: TextEditorState){
+export function handleEnter(state: TextEditorState){
     if (state.selection !== null) {
         removeSelectedText(state);
     }
@@ -317,7 +341,7 @@ function handleEnter(state: TextEditorState){
     cursor.column = 0;
 }
 
-function handleBackspace(state: TextEditorState){
+export function handleBackspace(state: TextEditorState){
     if (state.selection !== null){
         removeSelectedText(state);
         return;
@@ -337,7 +361,7 @@ function handleBackspace(state: TextEditorState){
     }
 }
 
-function handleTab(state: TextEditorState): void {
+export function handleTab(state: TextEditorState): void {
     const {lines, cursor} = state;
     if (state.selection !== null){
         manageTabsSelection(state);
@@ -349,7 +373,7 @@ function handleTab(state: TextEditorState): void {
     }
 }
 
-function pasteText(state: TextEditorState, text : string): void {
+export function pasteText(state: TextEditorState, text : string): void {
     if (state.selection !== null) removeSelectedText(state);
     const linesSplit : string[] = text.split("\n");
     
@@ -360,7 +384,7 @@ function pasteText(state: TextEditorState, text : string): void {
     }
 }
 
-function removeSelectedText(state: TextEditorState) : void {
+export function removeSelectedText(state: TextEditorState) : void {
     const selection : Selection = state.selection;
     if (selection === null) return;
     let {anchor: start, active: end} = selection;
@@ -405,7 +429,7 @@ function copySelection(state: TextEditorState) : string {
     return copyText;
 }
 
-function handleMovement(state: TextEditorState, key: ArrowKey, shift: boolean) {
+export function handleMovement(state: TextEditorState, key: ArrowKey, shift: boolean) {
     if (key !== "ArrowUp" && key !== "ArrowDown") state.savedVerticalCursorIndex = null;
 
     if (state.selection === null && shift) {
@@ -476,7 +500,7 @@ function copyHandler(e: ClipboardEvent, state: TextEditorState){
 
 type ArrowKey = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
 
-type EditorAction =
+export type EditorAction =
     | { type: "move"; key: ArrowKey; shift: boolean }
     | { type: "insert"; text: string; paste: boolean }  // typing, space, paste
     | { type: "enter" }
@@ -548,6 +572,4 @@ textBox.addEventListener("paste", (event) => {
     }
     eventHandler(state, history, e);
 });
-
-
 
