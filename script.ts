@@ -6,7 +6,7 @@ const PLACEHOLDER = "Click to edit here";
 const placeholder: HTMLDivElement= document.querySelector<HTMLDivElement>("#placeholder")!;
 placeholder.textContent = PLACEHOLDER;
 
-type Position = {
+export type Position = {
     line: number;
     column: number;
 };

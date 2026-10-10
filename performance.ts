@@ -1,8 +1,11 @@
 export {}
 
+const CSV_FILE_NAME : string = "baseline.csv"
+
 import {
     TextEditorState,
     EditorHistory,
+    Position,
     Selection,
     EditorAction,
     pushToUndo,
@@ -165,9 +168,65 @@ function writeCSV(rows: BenchmarkRow[]): void {
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = "benchmark.csv";
+    link.download = CSV_FILE_NAME;
     link.click();
 
     URL.revokeObjectURL(url);
 }
+
+
+function changeLines(state: TextEditorState, history: EditorHistory, newLines: string[]){
+    state.cursor = {line: 0, column: 0};
+    state.lines = newLines;
+    state.selection = null;
+    state.savedVerticalCursorIndex = null;
+    history = {undoStack: [], redoStack: [], openBlockCategory: null};
+}
+
+function isValidPosition(state: TextEditorState, position: Position): boolean{
+    const {line, column} = position;
+    return (line >= 0 && line < state.lines.length &&
+        column >= 0 && column < state.lines[column]!.length
+    );
+}
+
+function changeCursor(state: TextEditorState, history: EditorHistory, position: Position): void{
+    if (isValidPosition(state, position)){
+        state.cursor = {...position};
+        history.openBlockCategory = null;
+    }
+}
+
+function changeSelection(state: TextEditorState, newSelection : Selection){
+    if (newSelection === null){
+        state.selection = null;
+    } else if (isValidPosition(state, newSelection.active) && isValidPosition(state, newSelection.anchor)){
+      state.selection = {...newSelection};
+    }
+}
+
+state.lines = ["Lorem ipsum dolor sit amet, consectetur adipiscing elit."];
+state.cursor = {line: 0, column: 5};
+state.selection = {
+    anchor: {line: 0, column: 0},
+    active: {line: 0, column: 5},
+};
+
+const actions: EditorAction[] = [
+    {type: "cut"},
+    {type: "insert", text: "Lorem ipsum", paste: false},
+    {type: "insert", text: " dolor", paste: true},
+    {type: "move", key: "ArrowRight", shift: false},
+    {type: "enter"},
+    {type: "tab"},
+    {type: "backspace"},
+    {type: "undo"},
+    {type: "redo"},
+];
+
+const rows: BenchmarkRow[] = [];
+for (const action of actions) {
+    rows.push(...timeHandler(state, history, action));
+}
+writeCSV(rows);
 
