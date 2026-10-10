@@ -406,6 +406,20 @@ function copySelection(state: TextEditorState) : string {
     return copyText;
 }
 
+function handleMovement(state: TextEditorState, key: ArrowKey, shift: boolean) {
+    if (key !== "ArrowUp" && key !== "ArrowDown") state.savedVerticalCursorIndex = null;
+
+    if (state.selection === null && shift) {
+        state.selection = {anchor: {...state.cursor}, active: {...state.cursor}};
+    }
+
+    if (!shift){
+        state.selection = null;
+    }
+
+    moveCursor(state, key);
+}
+
 function eventHandler(state: TextEditorState, history: EditorHistory, action : EditorAction): void {
     const {type} = action;
 
@@ -413,18 +427,8 @@ function eventHandler(state: TextEditorState, history: EditorHistory, action : E
 
     switch (type){
         case "move":
-            const {key, shift} = action;
-            if (key !== "ArrowUp" && key !== "ArrowDown") state.savedVerticalCursorIndex = null;
-
-            if (state.selection === null && shift) {
-                state.selection = {anchor: {...state.cursor}, active: {...state.cursor}};
-            }
-
-            if (!shift){
-                state.selection = null;
-            }
-
-            moveCursor(state, key);
+            handleMovement(state, action.key, action.shift);
+            break;
         case "undo":
             undo(history, state);
             break;
