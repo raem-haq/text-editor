@@ -35,9 +35,13 @@ const history: EditorHistory = {
 };
 
 function timeFunction(func: () => any): number {
-    const start = performance.now()
-    func()
-    return performance.now() - start;
+    let timeTaken : number = 0;
+    const N = 20;
+    const start = performance.now();
+    for (let i = 0; i < N; i++){
+        func();
+    }
+    return (performance.now() - start) / N;
 }
 
 type BenchmarkRow = {
@@ -174,7 +178,6 @@ function writeCSV(rows: BenchmarkRow[]): void {
     URL.revokeObjectURL(url);
 }
 
-
 function changeLines(state: TextEditorState, history: EditorHistory, newLines: string[]){
     state.cursor = {line: 0, column: 0};
     state.lines = newLines;
@@ -205,12 +208,6 @@ function changeSelection(state: TextEditorState, newSelection : Selection){
     }
 }
 
-state.lines = ["Lorem ipsum dolor sit amet, consectetur adipiscing elit."];
-state.cursor = {line: 0, column: 5};
-state.selection = {
-    anchor: {line: 0, column: 0},
-    active: {line: 0, column: 5},
-};
 
 const actions: EditorAction[] = [
     {type: "cut"},
