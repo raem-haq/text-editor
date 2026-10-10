@@ -118,7 +118,6 @@ function restoreMemento(state: TextEditorState, memento: EditorMemento): void {
 function undo(history: EditorHistory, state: TextEditorState): boolean {
     const previous = history.undoStack.pop();
     if (previous === undefined) {
-        console.log("gchv");
         return false;
     }
 
