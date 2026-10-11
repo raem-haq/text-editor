@@ -16,11 +16,13 @@ import {
     removeSelectedText,
     pasteText,
     undo,
-    redo
+    redo,
+    ActionType
 } from "./script.js";
 
 const IMPLEMENTATION: string = "baseline";
 const CSV_FILE_NAME : string = IMPLEMENTATION + ".csv";
+const CHARS_PER_LINE = 100;
 
 const state: TextEditorState = {
     lines: [""],
@@ -44,26 +46,24 @@ function timeFunction(func: () => any): number {
     return (performance.now() - start) / N;
 }
 
-type BenchmarkRow = {
-  implementation: string;
-  operation: string;
-  functionName: string;
-  durationMS: number;
-  cursorIndex: number;
-  documentChars: number;
-  documentLines: number;
-  currentLineChars: number;
-  payloadLength: number;
-  selectionLength: number;
-  timestamp: number;
-};
 
-type BenchmarkContext = {
-    implementation: string;
-    documentChars: number;
-    documentLines: number;
-    payloadLength: number;
-};
+
+function createInitialState(): TextEditorState {
+    return {
+        lines: [""],
+        cursor: {line: 0, column: 0},
+        selection: null,
+        savedVerticalCursorIndex: null,
+    };
+}
+
+function createHistory(): EditorHistory {
+    return {
+        undoStack: [],
+        redoStack: [],
+        openBlockCategory: null,
+    };
+}
 
 function lengthOfSelection(selection: Selection): number {
     if (selection === null) return 0;
@@ -87,16 +87,16 @@ function lengthOfSelection(selection: Selection): number {
     return total;
 }
 
-function benchmarkCall(context: BenchmarkContext, state: TextEditorState, 
+function benchmarkCall(context: BenchmarkScenario, state: TextEditorState, 
     action: EditorAction, functionName: string, fn: () => void): BenchmarkRow {
   const payload = action.type === "insert" ? action.text : null;
 
   const currentLine = state.lines[state.cursor.line] ?? "";
 
-  const {implementation, documentChars, documentLines, payloadLength} = context;
+  const {documentChars, documentLines, payloadLength} = context;
 
   return {
-    implementation,
+    implementation: IMPLEMENTATION,
     documentChars,
     documentLines,
     payloadLength,
@@ -111,7 +111,7 @@ function benchmarkCall(context: BenchmarkContext, state: TextEditorState,
 }
 
 function timeHandler(
-    context: BenchmarkContext,
+    context: BenchmarkScenario,
     state: TextEditorState,
     history: EditorHistory,
     action : EditorAction,
@@ -191,18 +191,21 @@ function writeCSV(rows: BenchmarkRow[]): void {
     URL.revokeObjectURL(url);
 }
 
-function changeLines(state: TextEditorState, history: EditorHistory, newLines: string[]){
-    state.cursor = {line: 0, column: 0};
+function changeLines(state: TextEditorState, history: EditorHistory, newLines: string[]): void {
+    state.cursor = { line: 0, column: 0 };
     state.lines = newLines;
     state.selection = null;
     state.savedVerticalCursorIndex = null;
-    history = {undoStack: [], redoStack: [], openBlockCategory: null};
+
+    history.undoStack = [];
+    history.redoStack = [];
+    history.openBlockCategory = null;
 }
 
 function isValidPosition(state: TextEditorState, position: Position): boolean{
     const {line, column} = position;
     return (line >= 0 && line < state.lines.length &&
-        column >= 0 && column < state.lines[column]!.length
+        column >= 0 && column < state.lines[line]!.length
     );
 }
 
@@ -222,234 +225,104 @@ function changeSelection(state: TextEditorState, newSelection : Selection){
 }
 
 
-//Each of these is repeated N times.
-const actions: EditorAction[] = [
-    { type: "insert", text: "The quick brown fox jumps over the lazy dog.", paste: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "insert", text: "cat", paste: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "insert", text: "very ", paste: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "cut" },
-    { type: "insert", text: "beautiful", paste: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "insert", text: " and incredibly ", paste: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "backspace" },
-    { type: "insert", text: "remarkably", paste: false },
-    { type: "move", key: "ArrowUp", shift: false },
-    { type: "move", key: "ArrowDown", shift: false },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "move", key: "ArrowRight", shift: true },
-    { type: "undo" },
-    { type: "redo" },
-    { type: "insert", text: " Once upon a time, in a small village surrounded by green hills and ancient forests, there lived a curious young explorer named Alex. Every morning, Alex would wander through the winding streets, greeting neighbors and wondering what lay beyond the distant mountains. One sunny afternoon, while exploring an overgrown garden behind an abandoned cottage, Alex discovered a mysterious wooden door hidden beneath thick vines. The door had strange symbols carved into its surface, and a tiny brass handle that glimmered in the sunlight. With a deep breath and a little hesitation, Alex turned the handle and stepped into a world unlike anything they had ever imagined.", paste: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "insert", text: " incredibly", paste: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "insert", text: "wonderfully", paste: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "insert", text: " unexpectedly", paste: false },
-    { type: "enter" },
-    { type: "insert", text: "This is a new paragraph that contains enough text to exercise cursor placement throughout a long line. Moving the cursor backward and forward should allow edits at the beginning, middle, and end of the paragraph, rather than only at the boundaries. We can also select portions of text, replace them, and test how the editor handles changes to existing content.", paste: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "cut" },
-    { type: "insert", text: "a carefully rewritten section", paste: false },
-    { type: "move", key: "ArrowUp", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowRight", shift: true },
-    { type: "move", key: "ArrowRight", shift: true },
-    { type: "insert", text: "XX", paste: false },
-    { type: "undo" },
-    { type: "undo" },
-    { type: "redo" },
-    { type: "insert", text: " additional details", paste: false },
-    { type: "move", key: "ArrowDown", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "insert", text: " inserted midway ", paste: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "backspace" },
-    { type: "insert", text: "e", paste: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "insert", text: "edited", paste: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "cut" },
-    { type: "insert", text: "replacement text", paste: true },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "insert", text: " pasted in the middle", paste: true },
-    { type: "move", key: "ArrowUp", shift: false },
-    { type: "move", key: "ArrowUp", shift: true },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "backspace" },
-    { type: "undo" },
-    { type: "redo" },
-    { type: "enter" },
-    { type: "insert", text: "A multiline block follows, including several paragraphs, punctuation, numbers, and symbols.\nThe second line begins here and contains enough words to test horizontal cursor movement, text selection, and insertion in the middle of a sentence.\nThe third line includes 1234567890, brackets [a, b, c], braces {x: 1}, and symbols !@#$%^&*().\nThe fourth line deliberately contains repeated words: alpha alpha beta beta gamma gamma delta delta.\nThe final line concludes this pasted block and gives us a useful place to test undo and redo.", paste: true },
-    { type: "move", key: "ArrowUp", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "insert", text: "MIDDLE ", paste: false },
-    { type: "move", key: "ArrowRight", shift: true },
-    { type: "move", key: "ArrowRight", shift: true },
-    { type: "move", key: "ArrowRight", shift: true },
-    { type: "cut" },
-    { type: "insert", text: "replaced selection", paste: false },
-    { type: "move", key: "ArrowDown", shift: false },
-    { type: "move", key: "ArrowDown", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "insert", text: "123", paste: false },
-    { type: "tab" },
-    { type: "insert", text: "Indented content after a tab, followed by enough text to make the line long and provide multiple cursor positions for subsequent edits.", paste: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "backspace" },
-    { type: "insert", text: " corrected phrase", paste: false },
-    { type: "undo" },
-    { type: "redo" },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "insert", text: " in the center", paste: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "insert", text: "central", paste: false },
-    { type: "move", key: "ArrowUp", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "insert", text: "XYZ", paste: false },
-    { type: "undo" },
-    { type: "redo" },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "backspace" },
-    { type: "insert", text: "Q", paste: false },
-    { type: "move", key: "ArrowDown", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "cut" },
-    { type: "insert", text: "a different ending", paste: true },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "move", key: "ArrowRight", shift: false },
-    { type: "insert", text: " with a continuation", paste: false },
-    { type: "enter" },
-    { type: "insert", text: "The editor should now contain a substantial amount of content across multiple lines. This sequence intentionally moves the cursor back and forth before inserting, deleting, selecting, cutting, and replacing text. The edits target locations throughout the document so that cursor behavior can be tested away from line boundaries, while the history operations exercise undo and redo after several different kinds of changes.", paste: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "move", key: "ArrowLeft", shift: true },
-    { type: "insert", text: "modified", paste: false },
-    { type: "move", key: "ArrowUp", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowLeft", shift: false },
-    { type: "move", key: "ArrowRight", shift: true },
-    { type: "cut" },
-    { type: "insert", text: "final edit", paste: false },
-    { type: "undo" },
-    { type: "undo" },
-    { type: "redo" },
-    { type: "redo" },
-];
-
-const rows: BenchmarkRow[] = [];
-const context : BenchmarkContext = {
-    implementation: IMPLEMENTATION,
-    documentChars: state.lines.reduce((total, line) => total + line.length, 0),
-    documentLines: state.lines.length,
-    payloadLength: 0,
+type BenchmarkScenario = {
+    documentChars: number;
+    documentLines: number;
+    payloadLength: number;
 };
-for (const action of actions) {
-    rows.push(...timeHandler(context, state, history, action));
-}
-writeCSV(rows);
 
+type BenchmarkRow = {
+  implementation: string;
+  operation: string;
+  functionName: string;
+  durationMS: number;
+  cursorIndex: number;
+  documentChars: number;
+  documentLines: number;
+  currentLineChars: number;
+  payloadLength: number;
+  selectionLength: number;
+  timestamp: number;
+};
+
+function prepareState(state: TextEditorState, history: EditorHistory, documentLines: number, 
+        lineLength: number, cursorPercent: number, payloadLength: number): void {
+    const lines = Array.from({ length: Math.max(1, documentLines) }, () => "x".repeat(Math.max(1, lineLength)));
+
+    changeLines(state, history, lines);
+
+    const targetLine = Math.max(0, Math.min(lines.length - 1, Math.floor((lines.length - 1) / 2)));
+    const targetColumn = Math.max(0, Math.min(lines[targetLine]!.length, Math.round(lines[targetLine]!.length * cursorPercent)));
+
+    state.cursor = { line: targetLine, column: targetColumn };
+    state.selection = null;
+    state.savedVerticalCursorIndex = null;
+
+    if (payloadLength > 0 && state.cursor.column === state.lines[targetLine]!.length) {
+        state.lines[targetLine] = state.lines[targetLine]!.concat("x".repeat(Math.min(payloadLength, 10)));
+    }
+}
+
+function createPayload(length: number): string {
+    return "x".repeat(Math.max(0, length));
+}
+
+function constructAction(type: ActionType, payloadLength: number): EditorAction {
+    switch (type) {
+        case "insert":
+            return { type: "insert", text: createPayload(payloadLength), paste: false };
+        case "enter":
+            return { type: "enter" };
+        case "backspace":
+            return { type: "backspace" };
+        case "tab":
+            return { type: "tab" };
+        case "cut":
+            return { type: "cut" };
+        case "undo":
+            return { type: "undo" };
+        case "redo":
+            return { type: "redo" };
+        case "move":
+            return {
+                type: "move",
+                key: payloadLength % 2 === 0 ? "ArrowLeft" : "ArrowRight",
+                shift: false,
+            };
+        default:
+            return { type: "insert", text: "", paste: false };
+    }
+}
+
+function createScenarios() {
+    const documentNoLinesScales = [1, 10, 100, 1000];
+    const lineLengthScales = [10, 100, 1000, 10000];
+    const cursorPosScales = [0.0, 0.25, 0.5, 0.75, 1.0];
+    // for simplicity we don't allow payload to have multiple lines
+    // but it would be useful to measure say paste.
+    const payloadLengthScales = [10, 100, 1000, 10000];
+    const rows: BenchmarkRow[] = [];
+
+    for (const documentLines of documentNoLinesScales) {
+        for (const lineLength of lineLengthScales) {
+            for (const cursorPercent of cursorPosScales) {
+                for (const payloadLength of payloadLengthScales) {
+                    const context: BenchmarkScenario = {
+                        documentChars: documentLines * lineLength,
+                        documentLines,
+                        payloadLength,
+                    };
+
+                    prepareState(state, history, documentLines, lineLength, cursorPercent, payloadLength);
+
+                    for (const type of ["insert", "enter", "backspace", "tab", "cut", "undo", "redo", "move"] as ActionType[]) {
+                        const action: EditorAction = constructAction(type, payloadLength);
+                        rows.push(...timeHandler(context, state, history, action));
+                    }
+                }
+            }
+        }
+    }
+
+    writeCSV(rows);
+}

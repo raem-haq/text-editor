@@ -487,7 +487,7 @@ export type EditorAction =
     | { type: "undo" }
     | { type: "redo" };
 
-type ActionType = EditorAction["type"];
+export type ActionType = EditorAction["type"];
 
 type BlockCategory = "insert" | "backspace" | "enter" | "tab";
 
