@@ -28,13 +28,13 @@ type EditorMemento = {
     cursor: Position;
     selection: Selection;
     time: number;
-    endBlockCursor: Position;
 };
 
 export type EditorHistory = {
     undoStack: EditorMemento[];
     redoStack: EditorMemento[];
     openBlockCategory: BlockCategory | null;
+    endBlockCursor: Position | null;
 };
 
 
@@ -49,6 +49,7 @@ const history: EditorHistory = {
     undoStack: [],
     redoStack: [],
     openBlockCategory: null,
+    endBlockCursor: null;
 };
 
 function actionToBlockCategory(type: ActionType): BlockCategory | null {
@@ -70,6 +71,7 @@ export function pushToUndo(state: TextEditorState, history: EditorHistory, type:
     if (history.undoStack.length === 0) {
         history.undoStack.push(captureMemento(state));
         history.openBlockCategory = category;
+        history.endBlockCursor = {...state.cursor};
         return;
     }
     const previous : EditorMemento = history.undoStack.at(-1)!;
@@ -77,15 +79,14 @@ export function pushToUndo(state: TextEditorState, history: EditorHistory, type:
         category !== null &&
         history.openBlockCategory === category &&
         Date.now() - previous.time < 500 && // 500 ms - 0.5 s
-        previous.endBlockCursor === state.cursor
+        history.endBlockCursor === state.cursor
     ) {
         previous.time = Date.now();
-        previous.endBlockCursor = {...state.cursor};
-        return;
     } else {
         history.undoStack.push(captureMemento(state));
         history.openBlockCategory = category;
     }
+    history.endBlockCursor = {...state.cursor};
 }
 
 function captureMemento(state: TextEditorState): EditorMemento {

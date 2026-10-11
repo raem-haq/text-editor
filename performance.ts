@@ -3,8 +3,6 @@ export {}
 import {
     TextEditorState,
     EditorHistory,
-    Position,
-    Selection,
     EditorAction,
     pushToUndo,
     insertText,
@@ -22,20 +20,6 @@ import {
 
 const IMPLEMENTATION: string = "baseline";
 const CSV_FILE_NAME : string = IMPLEMENTATION + ".csv";
-const CHARS_PER_LINE = 100;
-
-const state: TextEditorState = {
-    lines: [""],
-    cursor: {line: 0, column: 0},
-    selection: null,
-    savedVerticalCursorIndex: null,
-};
-
-const history: EditorHistory = {
-    undoStack: [],
-    redoStack: [],
-    openBlockCategory: null,
-};
 
 function timeFunction(func: () => any): number {
     const N = 30;
@@ -57,15 +41,17 @@ function createInitialState(): TextEditorState {
     };
 }
 
-function createHistory(): EditorHistory {
+function createHistory(): EditorHistory { // function claims to do a lot, hehe
     return {
         undoStack: [],
         redoStack: [],
         openBlockCategory: null,
+        endBlockCursor: null,
     };
 }
 
-function lengthOfSelection(selection: Selection): number {
+function lengthOfSelection(state: TextEditorState): number {
+    const {selection} = state;
     if (selection === null) return 0;
 
     let { anchor: start, active: end } = selection;
@@ -105,7 +91,7 @@ function benchmarkCall(context: BenchmarkScenario, state: TextEditorState,
     durationMS: timeFunction(fn),
     cursorIndex: state.cursor.column,
     currentLineChars: currentLine.length,
-    selectionLength: lengthOfSelection(state.selection),
+    selectionLength: lengthOfSelection(state),
     timestamp: Date.now(),
   };
 }
@@ -202,29 +188,6 @@ function changeLines(state: TextEditorState, history: EditorHistory, newLines: s
     history.openBlockCategory = null;
 }
 
-function isValidPosition(state: TextEditorState, position: Position): boolean{
-    const {line, column} = position;
-    return (line >= 0 && line < state.lines.length &&
-        column >= 0 && column < state.lines[line]!.length
-    );
-}
-
-function changeCursor(state: TextEditorState, history: EditorHistory, position: Position): void{
-    if (isValidPosition(state, position)){
-        state.cursor = {...position};
-        history.openBlockCategory = null;
-    }
-}
-
-function changeSelection(state: TextEditorState, newSelection : Selection){
-    if (newSelection === null){
-        state.selection = null;
-    } else if (isValidPosition(state, newSelection.active) && isValidPosition(state, newSelection.anchor)){
-      state.selection = {...newSelection};
-    }
-}
-
-
 type BenchmarkScenario = {
     documentChars: number;
     documentLines: number;
@@ -246,21 +209,17 @@ type BenchmarkRow = {
 };
 
 function prepareState(state: TextEditorState, history: EditorHistory, documentLines: number, 
-        lineLength: number, cursorPercent: number, payloadLength: number): void {
+        lineLength: number, cursorPercent: number): void {
     const lines = Array.from({ length: Math.max(1, documentLines) }, () => "x".repeat(Math.max(1, lineLength)));
 
     changeLines(state, history, lines);
 
-    const targetLine = Math.max(0, Math.min(lines.length - 1, Math.floor((lines.length - 1) / 2)));
-    const targetColumn = Math.max(0, Math.min(lines[targetLine]!.length, Math.round(lines[targetLine]!.length * cursorPercent)));
+    const targetLine = Math.floor((lines.length - 1) / 2);
+    const targetColumn = Math.round(lines[targetLine]!.length * cursorPercent);
 
     state.cursor = { line: targetLine, column: targetColumn };
     state.selection = null;
     state.savedVerticalCursorIndex = null;
-
-    if (payloadLength > 0 && state.cursor.column === state.lines[targetLine]!.length) {
-        state.lines[targetLine] = state.lines[targetLine]!.concat("x".repeat(Math.min(payloadLength, 10)));
-    }
 }
 
 function createPayload(length: number): string {
@@ -286,7 +245,7 @@ function constructAction(type: ActionType, payloadLength: number): EditorAction 
         case "move":
             return {
                 type: "move",
-                key: payloadLength % 2 === 0 ? "ArrowLeft" : "ArrowRight",
+                key: payloadLength % 2 === 0 ? "ArrowLeft" : "ArrowRight", // doesn't test vertical movement
                 shift: false,
             };
         default:
@@ -294,7 +253,7 @@ function constructAction(type: ActionType, payloadLength: number): EditorAction 
     }
 }
 
-function createScenarios() {
+function test() {
     const documentNoLinesScales = [1, 10, 100, 1000];
     const lineLengthScales = [10, 100, 1000, 10000];
     const cursorPosScales = [0.0, 0.25, 0.5, 0.75, 1.0];
@@ -302,6 +261,9 @@ function createScenarios() {
     // but it would be useful to measure say paste.
     const payloadLengthScales = [10, 100, 1000, 10000];
     const rows: BenchmarkRow[] = [];
+
+    let state = createInitialState();
+    let history = createHistory();
 
     for (const documentLines of documentNoLinesScales) {
         for (const lineLength of lineLengthScales) {
@@ -313,10 +275,9 @@ function createScenarios() {
                         payloadLength,
                     };
 
-                    prepareState(state, history, documentLines, lineLength, cursorPercent, payloadLength);
-
                     for (const type of ["insert", "enter", "backspace", "tab", "cut", "undo", "redo", "move"] as ActionType[]) {
                         const action: EditorAction = constructAction(type, payloadLength);
+                        prepareState(state, history, documentLines, lineLength, cursorPercent);
                         rows.push(...timeHandler(context, state, history, action));
                     }
                 }
@@ -326,3 +287,5 @@ function createScenarios() {
 
     writeCSV(rows);
 }
+
+test();
