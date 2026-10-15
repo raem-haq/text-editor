@@ -249,7 +249,11 @@ function constructAction(type: ActionType, payloadLength: number): EditorAction 
     }
 }
 
-function test() {
+function yieldToBrowser(): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, 0));
+}
+
+async function test(): Promise<void> {
     const documentNoLinesScales = [1, 10, 100, 1000];
     const lineLengthScales = [10, 100, 1000, 10000];
     const cursorPosScales = [0.0, 0.3, 0.6, 1.0];
@@ -275,6 +279,7 @@ function test() {
                         const action: EditorAction = constructAction(type, payloadLength);
                         prepareState(state, history, documentLines, lineLength, cursorPercent);
                         rows.push(...timeHandler(context, state, history, action));
+                        await yieldToBrowser();
                     }
                 }
             }
@@ -284,4 +289,4 @@ function test() {
     writeCSV(rows);
 }
 
-test();
+export const benchmarkRun = test();
