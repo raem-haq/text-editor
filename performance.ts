@@ -22,7 +22,7 @@ const IMPLEMENTATION: string = "baseline";
 const CSV_FILE_NAME : string = IMPLEMENTATION + ".csv";
 
 function timeFunction(func: () => any): number {
-    const N = 30;
+    const N = 15;
     const start = performance.now();
     for (let i = 0; i < N; i++){
         func();
@@ -96,12 +96,8 @@ function benchmarkCall(context: BenchmarkScenario, state: TextEditorState,
   };
 }
 
-function timeHandler(
-    context: BenchmarkScenario,
-    state: TextEditorState,
-    history: EditorHistory,
-    action : EditorAction,
-): BenchmarkRow[] {
+function timeHandler(context: BenchmarkScenario, state: TextEditorState, 
+        history: EditorHistory, action : EditorAction,): BenchmarkRow[] {
     const returnRows : BenchmarkRow[] = [];
     const {type} = action;
 
@@ -256,7 +252,7 @@ function constructAction(type: ActionType, payloadLength: number): EditorAction 
 function test() {
     const documentNoLinesScales = [1, 10, 100, 1000];
     const lineLengthScales = [10, 100, 1000, 10000];
-    const cursorPosScales = [0.0, 0.25, 0.5, 0.75, 1.0];
+    const cursorPosScales = [0.0, 0.3, 0.6, 1.0];
     // for simplicity we don't allow payload to have multiple lines
     // but it would be useful to measure say paste.
     const payloadLengthScales = [10, 100, 1000, 10000];
