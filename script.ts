@@ -49,7 +49,7 @@ const history: EditorHistory = {
     undoStack: [],
     redoStack: [],
     openBlockCategory: null,
-    endBlockCursor: null;
+    endBlockCursor: null,
 };
 
 function actionToBlockCategory(type: ActionType): BlockCategory | null {
@@ -100,7 +100,6 @@ function captureMemento(state: TextEditorState): EditorMemento {
                 active: {...state.selection.active},
             },
         time: Date.now(),
-        endBlockCursor: {...state.cursor},
     };
 }
 
