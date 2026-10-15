@@ -241,13 +241,14 @@ function addSelection(lineElems : HTMLDivElement[], selection : Selection){
     }
 }
 
-function manageTabsSelection(state: TextEditorState){
-    if (state.selection === null) return;
+function manageTabsSelection(state: TextEditorState): LineSplice | null{
+    if (state.selection === null) return null;
     let {anchor: start, active: end} = state.selection;
 
     if (start.line > end.line || (start.line == end.line && start.column > end.column)){
         [start, end] = [end, start];
     }
+    const changes: LineSplice = {startLine: start.line, insertNo: 0, removeNo: end.line - start.line, endLine: end.line}
 
     if (start.line == end.line){
         const line = state.lines[start.line]!;
@@ -263,6 +264,7 @@ function manageTabsSelection(state: TextEditorState){
         state.selection.active.column += 4;
         state.cursor.column += 4;
     }
+    return changes;
 }
 
 
@@ -330,9 +332,9 @@ export function insertText(state: TextEditorState, text: string): void {
     cursor.column += text.length;
 }
 
-export function handleEnter(state: TextEditorState){
+export function handleEnter(state: TextEditorState): LineSplice | null {
     if (state.selection !== null) {
-        removeSelectedText(state);
+        return removeSelectedText(state);
     }
     const {lines, cursor} = state;
     const currentLine = lines[cursor.line]!;
@@ -343,12 +345,13 @@ export function handleEnter(state: TextEditorState){
 
     cursor.line += 1;
     cursor.column = 0;
+    return {startLine: cursor.line - 1, removeNo: 0, insertNo: 1, endLine: cursor.line};
 }
 
-export function handleBackspace(state: TextEditorState){
+export function handleBackspace(state: TextEditorState): LineSplice | null{
+    
     if (state.selection !== null){
-        removeSelectedText(state);
-        return;
+        return removeSelectedText(state);
     }
 
     const {lines, cursor} = state;
@@ -356,25 +359,29 @@ export function handleBackspace(state: TextEditorState){
     if (cursor.column > 0) {
         lines[cursor.line] = removeAt(lines[cursor.line]!, cursor.column - 1);
         cursor.column--;
-    } else if (cursor.line > 0) {
+        return {startLine: cursor.line, insertNo:0, removeNo:0, endLine: cursor.line};
+    }
+    if (cursor.line > 0) {
         const previousLineNo = cursor.line - 1;
         cursor.column = lines[previousLineNo]!.length;
         lines[previousLineNo] += lines[cursor.line]!;
         lines.splice(cursor.line, 1);
         cursor.line = previousLineNo;
+        return {startLine: cursor.line, insertNo:0, removeNo:1, endLine: cursor.line};
     }
+    return null;
 }
 
-export function handleTab(state: TextEditorState): void {
+export function handleTab(state: TextEditorState): LineSplice | null {
     const {lines, cursor} = state;
     if (state.selection !== null){
-        manageTabsSelection(state);
-    } else {
-        const noOfSpaces = 4 - cursor.column % 4;
-        lines[cursor.line] = insertInString(
-            lines[cursor.line]!, cursor.column, " ".repeat(noOfSpaces));
-        cursor.column += noOfSpaces;
+        return manageTabsSelection(state);
     }
+    const noOfSpaces = 4 - cursor.column % 4;
+    lines[cursor.line] = insertInString(
+        lines[cursor.line]!, cursor.column, " ".repeat(noOfSpaces));
+    cursor.column += noOfSpaces;
+    return {startLine: cursor.line, insertNo:0, removeNo:0, endLine: cursor.line};
 }
 
 export function pasteText(state: TextEditorState, text : string): void {
@@ -388,14 +395,16 @@ export function pasteText(state: TextEditorState, text : string): void {
     }
 }
 
-export function removeSelectedText(state: TextEditorState) : void {
+export function removeSelectedText(state: TextEditorState) : LineSplice | null {
     const selection : Selection = state.selection;
-    if (selection === null) return;
+    if (selection === null) return null;
     let {anchor: start, active: end} = selection;
 
     if (start.line > end.line || (start.line == end.line && start.column > end.column)){
         [start, end] = [end, start];
     }
+    // removeNo is not end.line - start.line + 1
+    const changes: LineSplice = {startLine: start.line, insertNo: 0, removeNo: end.line - start.line, endLine: end.line}
 
     if (start.line == end.line){
         const line = state.lines[start.line]!;
@@ -407,6 +416,7 @@ export function removeSelectedText(state: TextEditorState) : void {
     }
     state.cursor = {...start};
     state.selection = null;
+    return changes;
 }
 
 function copySelection(state: TextEditorState) : string {
