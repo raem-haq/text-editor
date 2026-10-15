@@ -52,6 +52,9 @@ const history: EditorHistory = {
     endBlockCursor: null,
 };
 
+
+
+
 function actionToBlockCategory(type: ActionType): BlockCategory | null {
     switch (type){
         case "backspace":
@@ -79,7 +82,9 @@ export function pushToUndo(state: TextEditorState, history: EditorHistory, type:
         category !== null &&
         history.openBlockCategory === category &&
         Date.now() - previous.time < 500 && // 500 ms - 0.5 s
-        history.endBlockCursor === state.cursor
+        history.endBlockCursor !== null &&
+        history.endBlockCursor.line === state.cursor.line &&
+        history.endBlockCursor.column === state.cursor.column
     ) {
         previous.time = Date.now();
     } else {
@@ -132,7 +137,8 @@ export function redo(history: EditorHistory, state: TextEditorState): boolean {
     const next = history.redoStack.pop();
     if (next === undefined) return false;
 
-    pushToUndo(state, history, "redo");
+    history.undoStack.push(captureMemento(state)); // don't call pushToUndo as that clears the redo stack
+    history.openBlockCategory = null;
     restoreMemento(state, next);
     return true;
 }
