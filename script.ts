@@ -38,6 +38,19 @@ export type EditorHistory = {
 };
 
 
+// from startLine (index of state.lines)
+// remove removeNo many lines
+// insert insertNo empty lines
+// fill all DOM elements i, where i goes from startLine to endLine inclusive
+// with the string in state.lines[i]
+type LineSplice = {
+    startLine: number;
+    removeNo: number;
+    insertNo: number;
+    endLine: number;
+}
+
+
 const state: TextEditorState = {
     lines: [""],
     cursor: {line: 0, column: 0},
@@ -51,7 +64,6 @@ const history: EditorHistory = {
     openBlockCategory: null,
     endBlockCursor: null,
 };
-
 
 
 
@@ -121,26 +133,35 @@ function restoreMemento(state: TextEditorState, memento: EditorMemento): void {
 }
 
 
-export function undo(history: EditorHistory, state: TextEditorState): boolean {
+export function undo(history: EditorHistory, state: TextEditorState): LineSplice | null {
     const previous = history.undoStack.pop();
     if (previous === undefined) {
-        return false;
+        return null;
     }
-
+    const oldLen:number = state.lines.length;
     history.redoStack.push(captureMemento(state));
     restoreMemento(state, previous);
     history.openBlockCategory = null;
-    return true;
+    const newLen: number = state.lines.length;
+    let change: LineSplice = {startLine: 0, removeNo: 0, insertNo: 0, endLine: newLen-1};
+    change.removeNo = Math.max(0, oldLen-newLen);
+    change.insertNo = Math.max(0, newLen-oldLen);
+    return change;
 }
 
-export function redo(history: EditorHistory, state: TextEditorState): boolean {
+export function redo(history: EditorHistory, state: TextEditorState): LineSplice | null {
     const next = history.redoStack.pop();
-    if (next === undefined) return false;
+    if (next === undefined) return null;
+    const oldLen:number = state.lines.length;
 
     history.undoStack.push(captureMemento(state)); // don't call pushToUndo as that clears the redo stack
     history.openBlockCategory = null;
     restoreMemento(state, next);
-    return true;
+    const newLen: number = state.lines.length;
+    let change: LineSplice = {startLine: 0, removeNo: 0, insertNo: 0, endLine: newLen-1};
+    change.removeNo = Math.max(0, oldLen-newLen);
+    change.insertNo = Math.max(0, newLen-oldLen);
+    return change;
 }
 
 
@@ -412,18 +433,33 @@ function copySelection(state: TextEditorState) : string {
     return copyText;
 }
 
-export function handleMovement(state: TextEditorState, key: ArrowKey, shift: boolean) {
+export function handleMovement(state: TextEditorState, key: ArrowKey, shift: boolean): LineSplice {
+    let {selection, cursor} = state;
     if (key !== "ArrowUp" && key !== "ArrowDown") state.savedVerticalCursorIndex = null;
+    
+    const change: LineSplice = {startLine: cursor.line, removeNo: 0, insertNo: 0, endLine: cursor.line};
 
-    if (state.selection === null && shift) {
-        state.selection = {anchor: {...state.cursor}, active: {...state.cursor}};
+    if (selection === null && shift) {
+        selection = {anchor: {...cursor}, active: {...cursor}};
     }
 
     if (!shift){
+        if (selection !== null){
+            let {anchor: start, active: end} = selection;
+
+            if (start.line > end.line || (start.line == end.line && start.column > end.column)){
+                [start, end] = [end, start];
+            }
+            change.startLine = start.line // this is <= cursor.line
+            change.endLine = end.line
+        }
         state.selection = null;
     }
+    moveCursor(state, key)
 
-    moveCursor(state, key);
+    change.endLine = Math.max(change.endLine, cursor.line);
+    change.startLine = Math.min(change.startLine, cursor.line);
+    return change;
 }
 
 function eventHandler(state: TextEditorState, history: EditorHistory, action : EditorAction): void {
@@ -431,43 +467,44 @@ function eventHandler(state: TextEditorState, history: EditorHistory, action : E
 
     if (type !== "move") state.savedVerticalCursorIndex = null;
 
+    let change: LineSplice | null;
     switch (type){
         case "move":
-            handleMovement(state, action.key, action.shift);
+            change = handleMovement(state, action.key, action.shift);
             break;
         case "undo":
-            undo(history, state);
+            change= undo(history, state);
             break;
         case "redo":
-            redo(history, state);
+            change= redo(history, state);
             break;
         case "cut":
             pushToUndo(state, history, type);
-            removeSelectedText(state);
+            change= removeSelectedText(state);
             break;
         case "insert":
             const {text, paste} = action;
             pushToUndo(state, history, type);
             if (paste){
-                pasteText(state, text);
+                change= pasteText(state, text);
             } else {
-                insertText(state, text)
+                change= insertText(state, text)
             }
             break;
         case "backspace":
             pushToUndo(state, history, type);
-            handleBackspace(state);
+            change= handleBackspace(state);
             break;
         case "enter":
             pushToUndo(state, history, type);
-            handleEnter(state);
+            change= handleEnter(state);
             break;
         case "tab":
             pushToUndo(state, history, type);
-            handleTab(state);
+            change= handleTab(state);
             break;
     }
-    renderDOM(state);
+    renderDOMchange(state, change);
 }
 
 
