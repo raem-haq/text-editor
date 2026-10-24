@@ -34,9 +34,9 @@ function timeFunction(func: () => any): number {
 function createInitialState(): TextEditorState {
     return {
         lines: [""],
-        cursor: {line: 0, column: 0},
+        cursor: {line: 0, offset: 0},
         selection: null,
-        savedVerticalCursorIndex: null,
+        savedVerticalOffset: null,
     };
 }
 
@@ -53,21 +53,21 @@ function lengthOfSelection(state: TextEditorState): number {
     const {selection} = state;
     if (selection === null) return 0;
 
-    let { anchor: start, active: end } = selection;
+    let { start: start, end: end } = selection;
 
-    if (start.line > end.line || (start.line === end.line && start.column > end.column)) {
+    if (start.line > end.line || (start.line === end.line && start.offset > end.offset)) {
         [start, end] = [end, start];
     }
 
     if (start.line === end.line) {
-        return Math.abs(end.column - start.column);
+        return Math.abs(end.offset - start.offset);
     }
 
-    let total = state.lines[start.line]!.length - start.column + 1;
+    let total = state.lines[start.line]!.length - start.offset + 1;
     for (let line = start.line + 1; line < end.line; line++) {
         total += state.lines[line]!.length;
     }
-    total += end.column + 1;
+    total += end.offset + 1;
 
     return total;
 }
@@ -88,7 +88,7 @@ function benchmarkCall(context: BenchmarkScenario, state: TextEditorState,
     operation: action.type as string,
     functionName,
     durationMS: timeFunction(fn),
-    cursorIndex: state.cursor.column,
+    cursorIndex: state.cursor.offset,
     currentLineChars: currentLine.length,
     selectionLength: lengthOfSelection(state),
     timestamp: Date.now(),
@@ -100,7 +100,7 @@ function timeHandler(context: BenchmarkScenario, state: TextEditorState,
     const returnRows : BenchmarkRow[] = [];
     const {type} = action;
 
-    if (type !== "move") state.savedVerticalCursorIndex = null;
+    if (type !== "move") state.savedVerticalOffset = null;
 
     switch (type){
         case "move":
@@ -173,10 +173,10 @@ function writeCSV(rows: BenchmarkRow[]): void {
 }
 
 function changeLines(state: TextEditorState, history: EditorHistory, newLines: string[]): void {
-    state.cursor = { line: 0, column: 0 };
+    state.cursor = { line: 0, offset: 0 };
     state.lines = newLines;
     state.selection = null;
-    state.savedVerticalCursorIndex = null;
+    state.savedVerticalOffset = null;
 
     history.undoStack = [];
     history.redoStack = [];
@@ -212,9 +212,9 @@ function prepareState(state: TextEditorState, history: EditorHistory, documentLi
     const targetLine = Math.floor((lines.length - 1) / 2);
     const targetColumn = Math.round(lines[targetLine]!.length * cursorPercent);
 
-    state.cursor = { line: targetLine, column: targetColumn };
+    state.cursor = { line: targetLine, offset: targetColumn };
     state.selection = null;
-    state.savedVerticalCursorIndex = null;
+    state.savedVerticalOffset = null;
 }
 
 function createPayload(length: number): string {
