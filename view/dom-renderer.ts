@@ -1,8 +1,4 @@
-import type { TextEditorState, LineSplice, Selection } from '../core/types';
-
-const PLACEHOLDER = 'Click to edit here';
-const placeholder: HTMLDivElement = document.querySelector<HTMLDivElement>('#placeholder')!;
-placeholder.textContent = PLACEHOLDER;
+import type { TextEditorState, LineSplice, Selection } from '../core/types.js';
 
 function addCursor(line: HTMLDivElement, cursorPos: number) {
     const textNode =
@@ -61,20 +57,23 @@ function addSelection(lineElems: HTMLCollection, selection: Selection | null) {
 
 function performLineSplice(change: LineSplice) {
     const { startLine, removeNo, insertNo } = change;
-    const linesDOM: HTMLCollection = document.getElementById('text-box')!.children;
-    const startDiv: Element = linesDOM.item(startLine - 1)!;
-    let currLine = startDiv;
+    const textBox = document.getElementById('text-box')!;
+    const linesDOM: HTMLCollection = textBox.children;
+    const startDiv = linesDOM.item(startLine);
+    if (startDiv === null) throw new Error('LineSplice startLine is out of range');
+    let currLine: Element = startDiv;
+
     for (let i = 0; i < removeNo; i++) {
         const nextLine: Element | null = currLine.nextElementSibling;
         if (nextLine === null) throw new Error('LineSplice incorrect');
         currLine.remove();
         currLine = nextLine;
     }
-    currLine = startDiv;
+
     for (let i = 0; i < insertNo; i++) {
-        const newLine = document.createAttribute('div');
-        currLine = currLine.nextElementSibling!;
-        document.insertBefore(newLine, currLine);
+        const newLine = document.createElement('div');
+        textBox.insertBefore(newLine, currLine.nextElementSibling);
+        currLine = newLine;
     }
 }
 
@@ -88,7 +87,7 @@ function replaceDOMLines(state: TextEditorState, change: LineSplice) {
     addSelection(linesDOM, state.selection);
 }
 
-export function renderDOMchange(state: TextEditorState, change: LineSplice | null): void {
+export function renderDOMchange(state: TextEditorState, change: LineSplice | null, placeholder: HTMLDivElement): void {
     placeholder.hidden = !(state.lines.length === 1 && state.lines[0] === '');
     if (change === null) return;
     performLineSplice(change);

@@ -1,5 +1,5 @@
-import type { TextEditorState, LineSplice } from '../core/types';
-import type { EditorAction } from '../input/keyboard';
+import type { TextEditorState, LineSplice } from '../core/types.js';
+import type { EditorAction } from '../input/keyboard.js';
 import {
     handleMovement,
     handleBackspace,

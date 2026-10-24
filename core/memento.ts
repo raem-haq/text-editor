@@ -1,4 +1,4 @@
-import type { TextEditorState, Cursor, Selection } from './types';
+import type { TextEditorState, Cursor, Selection } from './types.js';
 
 export type EditorMemento = {
     lines: string[];

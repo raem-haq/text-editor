@@ -1,5 +1,5 @@
-import type { Position, Selection, TextEditorState, LineSplice } from './types';
-import type { ArrowKey } from '../input/keyboard';
+import type { Position, Selection, TextEditorState, LineSplice } from './types.js';
+import type { ArrowKey } from '../input/keyboard.js';
 
 export function initialiseState(): TextEditorState {
     return {
@@ -22,7 +22,6 @@ function removeAt(value: string, i: number): string {
 
 function moveCursor(state: TextEditorState, key: ArrowKey): void {
     const { lines, cursor } = state;
-    let currentLine: string = lines[cursor.line]!;
 
     switch (key) {
         case 'ArrowLeft':
@@ -30,11 +29,11 @@ function moveCursor(state: TextEditorState, key: ArrowKey): void {
                 cursor.offset--;
             } else if (cursor.line > 0) {
                 cursor.line--;
-                cursor.offset = currentLine.length;
+                cursor.offset = lines[cursor.line]!.length;
             }
             break;
         case 'ArrowRight':
-            if (cursor.offset < currentLine.length) {
+            if (cursor.offset < lines[cursor.line]!.length) {
                 cursor.offset++;
             } else if (cursor.line < lines.length - 1) {
                 cursor.line++;
@@ -47,7 +46,7 @@ function moveCursor(state: TextEditorState, key: ArrowKey): void {
                 if (state.savedVerticalOffset === null) {
                     state.savedVerticalOffset = cursor.offset;
                 }
-                cursor.offset = Math.min(state.savedVerticalOffset!, currentLine.length);
+                cursor.offset = Math.min(state.savedVerticalOffset!, lines[cursor.line]!.length);
             } else {
                 cursor.offset = 0;
             }
@@ -55,13 +54,12 @@ function moveCursor(state: TextEditorState, key: ArrowKey): void {
         case 'ArrowDown':
             if (cursor.line < lines.length - 1) {
                 cursor.line++;
-                currentLine = lines[cursor.line]!;
                 if (state.savedVerticalOffset === null) {
                     state.savedVerticalOffset = cursor.offset;
                 }
-                cursor.offset = Math.min(state.savedVerticalOffset!, currentLine.length);
+                cursor.offset = Math.min(state.savedVerticalOffset!, lines[cursor.line]!.length);
             } else {
-                cursor.offset = currentLine.length;
+                cursor.offset = lines[cursor.line]!.length;
             }
             break;
     }
@@ -136,10 +134,12 @@ function insertTabsNoSelection(state: TextEditorState): void {
 }
 
 export function handleTab(state: TextEditorState): LineSplice | null {
-    const { lines, cursor } = state;
+    const { cursor, selection } = state;
     if (state.selection !== null) {
+        const startLine = Math.min(selection!.anchor.line, selection!.focus.line);
+        const endLine = Math.max(selection!.anchor.line, selection!.focus.line);
         manageTabsSelection(state);
-        return getRemovedSelectionLineSplice(state);
+        return { startLine, insertNo: 0, removeNo: 0, endLine };
     }
     insertTabsNoSelection(state);
     return { startLine: cursor.line, insertNo: 0, removeNo: 0, endLine: cursor.line };
@@ -218,7 +218,7 @@ export function copySelectionToText(state: TextEditorState): string {
 }
 
 export function handleMovement(state: TextEditorState, key: ArrowKey, shift: boolean): LineSplice {
-    let { selection, cursor } = state;
+    const { cursor } = state;
     if (key !== 'ArrowUp' && key !== 'ArrowDown') state.savedVerticalOffset = null;
 
     const change: LineSplice = {
@@ -228,13 +228,13 @@ export function handleMovement(state: TextEditorState, key: ArrowKey, shift: boo
         endLine: cursor.line,
     };
 
-    if (selection === null && shift) {
-        selection = { anchor: { ...cursor }, focus: { ...cursor } };
+    if (state.selection === null && shift) {
+        state.selection = { anchor: { ...cursor }, focus: { ...cursor } };
     }
 
     if (!shift) {
-        if (selection !== null) {
-            let { anchor: start, focus: end } = selection;
+        if (state.selection !== null) {
+            let { anchor: start, focus: end } = state.selection;
 
             if (start.line > end.line || (start.line == end.line && start.offset > end.offset)) {
                 [start, end] = [end, start];
@@ -245,6 +245,9 @@ export function handleMovement(state: TextEditorState, key: ArrowKey, shift: boo
         state.selection = null;
     }
     moveCursor(state, key);
+    if (shift && state.selection !== null) {
+        state.selection.focus = { ...cursor };
+    }
 
     change.endLine = Math.max(change.endLine, cursor.line);
     change.startLine = Math.min(change.startLine, cursor.line);

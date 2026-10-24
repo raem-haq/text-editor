@@ -20,13 +20,15 @@ export function keyToAction(event: KeyboardEvent): EditorAction | null {
 
     const isUndo = isMac
         ? event.metaKey && k === 'z' && !event.shiftKey
-        : event.ctrlKey && k === 'z'; // allows ctrl+shift+z on windows, maybe other sticky keys shouldn't match
+        : event.ctrlKey && k === 'z' && !event.shiftKey;
     if (isUndo) return { type: 'undo' };
 
     const isRedo = isMac
         ? event.metaKey && k === 'z' && event.shiftKey
-        : event.ctrlKey && k === 'y';
+        : event.ctrlKey && (k === 'y' || (k === 'z' && event.shiftKey));
     if (isRedo) return { type: 'redo' };
+
+    if (event.ctrlKey || event.metaKey || event.altKey) return null;
 
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) {
         return { type: 'move', key: key as ArrowKey, shift: event.shiftKey };

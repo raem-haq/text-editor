@@ -1,7 +1,7 @@
-import type { TextEditorState, LineSplice, Cursor } from '../core/types';
-import type { ActionType } from '../input/keyboard';
-import type { EditorMemento } from '../core/memento';
-import { captureMemento, restoreMemento } from '../core/memento';
+import type { TextEditorState, LineSplice } from '../core/types.js';
+import type { EditorAction } from '../input/keyboard.js';
+import type { EditorMemento } from '../core/memento.js';
+import { captureMemento, restoreMemento } from '../core/memento.js';
 
 type BlockCategory = 'backspace' | 'cut' | 'enter' | 'insert' | 'tab' | 'space' | null;
 
@@ -9,7 +9,6 @@ export type EditorHistory = {
     undoStack: EditorMemento[];
     redoStack: EditorMemento[];
     openBlockCategory: BlockCategory;
-    endBlockCursor: Cursor | null;
 };
 
 export function initialiseHistory(): EditorHistory {
@@ -17,12 +16,11 @@ export function initialiseHistory(): EditorHistory {
         undoStack: [],
         redoStack: [],
         openBlockCategory: null,
-        endBlockCursor: null,
     };
 }
 
-function actionToBlockCategory(type: ActionType): BlockCategory | null {
-    switch (type) {
+function actionToBlockCategory(action: EditorAction): BlockCategory | null {
+    switch (action.type) {
         case 'backspace':
         case 'cut':
         case 'enter':
@@ -39,43 +37,56 @@ function actionToBlockCategory(type: ActionType): BlockCategory | null {
     }
 }
 
+function actionChangesDocument(state: TextEditorState, action: EditorAction): boolean {
+    switch (action.type) {
+        case 'insert':
+        case 'paste':
+            return action.text.length > 0 || state.selection !== null;
+        case 'enter':
+        case 'tab':
+            return true;
+        case 'backspace':
+            return (
+                state.selection !== null ||
+                state.cursor.offset > 0 ||
+                state.cursor.line > 0
+            );
+        case 'cut':
+            return state.selection !== null;
+        case 'move':
+        case 'redo':
+        case 'undo':
+            return false;
+    }
+}
+
 export function updateHistory(
     state: TextEditorState,
     history: EditorHistory,
-    type: ActionType,
+    action: EditorAction,
 ): void {
-    if (type !== 'redo' && type !== 'undo') {
-        history.redoStack = [];
-    }
-    const category = actionToBlockCategory(type);
-
-    if (category === null) {
+    const category = actionToBlockCategory(action);
+    if (category === null || !actionChangesDocument(state, action)) {
         history.openBlockCategory = null;
-        history.endBlockCursor = null;
         return;
     }
 
+    history.redoStack = [];
     if (history.undoStack.length === 0) {
         history.undoStack.push(captureMemento(state));
         history.openBlockCategory = category;
-        history.endBlockCursor = { ...state.cursor };
         return;
     }
     const previous: EditorMemento = history.undoStack.at(-1)!;
     if (
-        category !== null &&
         history.openBlockCategory === category &&
-        Date.now() - previous.time < 500 && // 500 ms - 0.5 s
-        history.endBlockCursor !== null &&
-        history.endBlockCursor.line === state.cursor.line &&
-        history.endBlockCursor.offset === state.cursor.offset
+        Date.now() - previous.time < 500
     ) {
         previous.time = Date.now();
     } else {
         history.undoStack.push(captureMemento(state));
         history.openBlockCategory = category;
     }
-    history.endBlockCursor = { ...state.cursor };
 }
 
 export function undo(history: EditorHistory, state: TextEditorState): LineSplice | null {
