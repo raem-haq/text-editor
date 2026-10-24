@@ -169,6 +169,7 @@ function insertInString(s : string, i : number, v : string) : string {
     return s.slice(0, i) + v + s.slice(i);
 }
 
+/*
 export function renderDOM(state: TextEditorState): void {
     placeholder.hidden = !(state.lines.length === 1 && state.lines[0] === "");
     textBox.replaceChildren();
@@ -182,7 +183,7 @@ export function renderDOM(state: TextEditorState): void {
     addCursor(lineElements[state.cursor.line]!, state.cursor.column);
     addSelection(lineElements, state.selection);
 }
-
+*/
 
 function addCursor(line : HTMLDivElement, cursorPos : number) {
     const textNode =
@@ -551,6 +552,7 @@ function replaceDOMLines(state: TextEditorState, change: LineSplice){
 }
 
 function renderDOMchange(state: TextEditorState, change: LineSplice|null){
+    placeholder.hidden = !(state.lines.length === 1 && state.lines[0] === "");
     if (change === null) return;
     performLineSplice(change);
     replaceDOMLines(state, change);

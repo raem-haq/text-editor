@@ -5,14 +5,13 @@ import {
     EditorHistory,
     EditorAction,
     pushToUndo,
-    insertText,
-    renderDOM,
+    insertCharacters,
     handleEnter,
     handleBackspace,
     handleMovement,
     handleTab,
     removeSelectedText,
-    pasteText,
+    insertText,
     undo,
     redo,
     ActionType
@@ -121,9 +120,9 @@ function timeHandler(context: BenchmarkScenario, state: TextEditorState,
             const {text, paste} = action;
             returnRows.push(benchmarkCall(context, state, action, "pushToUndo", () => pushToUndo(state, history, type)));
             if (paste){
-                returnRows.push(benchmarkCall(context, state, action, "pasteText", () => pasteText(state, text)));
+                returnRows.push(benchmarkCall(context, state, action, "pasteText", () => insertText(state, text)));
             } else {
-                returnRows.push(benchmarkCall(context, state, action, "insertText", () => insertText(state, text)));
+                returnRows.push(benchmarkCall(context, state, action, "insertText", () => insertCharacters(state, text)));
             }
             break;
         case "backspace":
