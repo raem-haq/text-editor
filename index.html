@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+<!doctype html>
 
 <html lang="en">
-    <head >
-        <meta charset="UTF-8">
+    <head>
+        <meta charset="UTF-8" />
         <title>Text Editor</title>
-        <script type="module" src="build/script.js" defer></script>
+        <script type="module" src="build/editor.js" defer></script>
 
         <style>
             #editor-wrapper {
@@ -24,7 +24,7 @@
                 white-space: pre-wrap;
                 min-height: 1.2em;
             }
-            
+
             #placeholder {
                 position: absolute;
                 color: #999;
@@ -32,10 +32,7 @@
                 pointer-events: none; /* clicks fall through to the editor */
             }
 
-
-            #text-box.is-empty
-
-            .cursor {
+            #text-box.is-empty .cursor {
                 display: inline-block;
                 width: 2px;
                 height: 1.2em;
@@ -50,8 +47,13 @@
             }
 
             @keyframes blink {
-                0%, 100% { opacity: 1; }
-                50% { opacity: 0; }
+                0%,
+                100% {
+                    opacity: 1;
+                }
+                50% {
+                    opacity: 0;
+                }
             }
         </style>
     </head>

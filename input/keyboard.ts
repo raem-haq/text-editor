@@ -2,9 +2,8 @@ export type ArrowKey = 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight';
 
 export type EditorAction =
     | { type: 'move'; key: ArrowKey; shift: boolean }
-    | { type: 'insert'; text: string}
+    | { type: 'insert'; text: string }
     | { type: 'paste'; text: string }
-    | { type: 'enter'}
     | { type: 'enter' }
     | { type: 'backspace' }
     | { type: 'tab' }
@@ -40,6 +39,6 @@ export function keyToAction(event: KeyboardEvent): EditorAction | null {
         case 'Tab':
             return { type: 'tab' };
         default:
-            return key.length === 1 ? { type: 'insert', text: key} : null;
+            return key.length === 1 ? { type: 'insert', text: key } : null;
     }
 }

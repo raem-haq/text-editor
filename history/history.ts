@@ -1,9 +1,11 @@
-import type { TextEditorState, LineSplice, EditorMemento, Cursor } from './core/types';
-import type { ActionType } from './input/keyboard';
+import type { TextEditorState, LineSplice, Cursor } from '../core/types';
+import type { ActionType } from '../input/keyboard';
+import type { EditorMemento } from '../core/memento';
+import { captureMemento, restoreMemento } from '../core/memento';
 
-type BlockCategory = 'backspace' | 'enter' | 'insert' | 'tab' | 'space' | null;
+type BlockCategory = 'backspace' | 'cut' | 'enter' | 'insert' | 'tab' | 'space' | null;
 
-type EditorHistory = {
+export type EditorHistory = {
     undoStack: EditorMemento[];
     redoStack: EditorMemento[];
     openBlockCategory: BlockCategory;
@@ -22,28 +24,35 @@ export function initialiseHistory(): EditorHistory {
 function actionToBlockCategory(type: ActionType): BlockCategory | null {
     switch (type) {
         case 'backspace':
+        case 'cut':
         case 'enter':
         case 'insert':
+            return type;
+        case 'paste':
+            return 'insert';
         case 'tab':
             return type;
-        default:
+        case 'move':
+        case 'redo':
+        case 'undo':
             return null;
     }
 }
 
-export function pushToUndo(state: TextEditorState, history: EditorHistory, type: ActionType): void {
+export function updateHistory(
+    state: TextEditorState,
+    history: EditorHistory,
+    type: ActionType,
+): void {
+    if (type !== 'redo' && type !== 'undo') {
+        history.redoStack = [];
+    }
     const category = actionToBlockCategory(type);
 
-    switch (category) {
-        case 'backspace':
-        case 'enter':
-        case 'insert':
-        case 'tab':
-            break;
-        case null:
-            history.openBlockCategory = null;
-            history.endBlockCursor = null;
-            return;
+    if (category === null) {
+        history.openBlockCategory = null;
+        history.endBlockCursor = null;
+        return;
     }
 
     if (history.undoStack.length === 0) {
@@ -69,35 +78,7 @@ export function pushToUndo(state: TextEditorState, history: EditorHistory, type:
     history.endBlockCursor = { ...state.cursor };
 }
 
-function captureMemento(state: TextEditorState): EditorMemento {
-    return {
-        lines: [...state.lines],
-        cursor: { ...state.cursor },
-        selection:
-            state.selection === null
-                ? null
-                : {
-                      anchor: { ...state.selection.anchor },
-                      focus: { ...state.selection.focus },
-                  },
-        time: Date.now(),
-    };
-}
-
-function restoreMemento(state: TextEditorState, memento: EditorMemento): void {
-    state.lines = [...memento.lines];
-    state.cursor = { ...memento.cursor };
-    state.selection =
-        memento.selection === null
-            ? null
-            : {
-                  anchor: { ...memento.selection.anchor },
-                  focus: { ...memento.selection.focus },
-              };
-    state.savedVerticalOffset = null;
-}
-
-function undo(history: EditorHistory, state: TextEditorState): LineSplice | null {
+export function undo(history: EditorHistory, state: TextEditorState): LineSplice | null {
     const previous = history.undoStack.pop();
     if (previous === undefined) {
         return null;
@@ -113,12 +94,12 @@ function undo(history: EditorHistory, state: TextEditorState): LineSplice | null
     return change;
 }
 
-function redo(history: EditorHistory, state: TextEditorState): LineSplice | null {
+export function redo(history: EditorHistory, state: TextEditorState): LineSplice | null {
     const next = history.redoStack.pop();
     if (next === undefined) return null;
     const oldLen: number = state.lines.length;
 
-    history.undoStack.push(captureMemento(state)); // don't call pushToUndo as that clears the redo stack
+    history.undoStack.push(captureMemento(state)); // don't call updateHistory as that clears the redo stack
     history.openBlockCategory = null;
     restoreMemento(state, next);
     const newLen: number = state.lines.length;

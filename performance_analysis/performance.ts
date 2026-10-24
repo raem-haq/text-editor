@@ -1,4 +1,4 @@
-export {}
+export {};
 
 import {
     TextEditorState,
@@ -14,33 +14,32 @@ import {
     insertText,
     undo,
     redo,
-    ActionType
-} from "./script.js";
+    ActionType,
+} from './script.js';
 
-const IMPLEMENTATION: string = "baseline";
-const CSV_FILE_NAME : string = IMPLEMENTATION + ".csv";
+const IMPLEMENTATION: string = 'baseline';
+const CSV_FILE_NAME: string = IMPLEMENTATION + '.csv';
 
 function timeFunction(func: () => any): number {
     const N = 15;
     const start = performance.now();
-    for (let i = 0; i < N; i++){
+    for (let i = 0; i < N; i++) {
         func();
     }
     return (performance.now() - start) / N;
 }
 
-
-
 function createInitialState(): TextEditorState {
     return {
-        lines: [""],
-        cursor: {line: 0, offset: 0},
+        lines: [''],
+        cursor: { line: 0, offset: 0 },
         selection: null,
         savedVerticalOffset: null,
     };
 }
 
-function createHistory(): EditorHistory { // function claims to do a lot, hehe
+function createHistory(): EditorHistory {
+    // function claims to do a lot, hehe
     return {
         undoStack: [],
         redoStack: [],
@@ -50,10 +49,10 @@ function createHistory(): EditorHistory { // function claims to do a lot, hehe
 }
 
 function lengthOfSelection(state: TextEditorState): number {
-    const {selection} = state;
+    const { selection } = state;
     if (selection === null) return 0;
 
-    let { start: start, end: end } = selection;
+    let { anchor: start, focus: end } = selection;
 
     if (start.line > end.line || (start.line === end.line && start.offset > end.offset)) {
         [start, end] = [end, start];
@@ -72,98 +71,151 @@ function lengthOfSelection(state: TextEditorState): number {
     return total;
 }
 
-function benchmarkCall(context: BenchmarkScenario, state: TextEditorState, 
-    action: EditorAction, functionName: string, fn: () => void): BenchmarkRow {
-  const payload = action.type === "insert" ? action.text : null;
+function benchmarkCall(
+    context: BenchmarkScenario,
+    state: TextEditorState,
+    action: EditorAction,
+    functionName: string,
+    fn: () => void,
+): BenchmarkRow {
+    const payload = action.type === 'insert' ? action.text : null;
 
-  const currentLine = state.lines[state.cursor.line] ?? "";
+    const currentLine = state.lines[state.cursor.line] ?? '';
 
-  const {documentChars, documentLines, payloadLength} = context;
+    const { documentChars, documentLines, payloadLength } = context;
 
-  return {
-    implementation: IMPLEMENTATION,
-    documentChars,
-    documentLines,
-    payloadLength,
-    operation: action.type as string,
-    functionName,
-    durationMS: timeFunction(fn),
-    cursorIndex: state.cursor.offset,
-    currentLineChars: currentLine.length,
-    selectionLength: lengthOfSelection(state),
-    timestamp: Date.now(),
-  };
+    return {
+        implementation: IMPLEMENTATION,
+        documentChars,
+        documentLines,
+        payloadLength,
+        operation: action.type as string,
+        functionName,
+        durationMS: timeFunction(fn),
+        cursorIndex: state.cursor.offset,
+        currentLineChars: currentLine.length,
+        selectionLength: lengthOfSelection(state),
+        timestamp: Date.now(),
+    };
 }
 
-function timeHandler(context: BenchmarkScenario, state: TextEditorState, 
-        history: EditorHistory, action : EditorAction,): BenchmarkRow[] {
-    const returnRows : BenchmarkRow[] = [];
-    const {type} = action;
+function timeHandler(
+    context: BenchmarkScenario,
+    state: TextEditorState,
+    history: EditorHistory,
+    action: EditorAction,
+): BenchmarkRow[] {
+    const returnRows: BenchmarkRow[] = [];
+    const { type } = action;
 
-    if (type !== "move") state.savedVerticalOffset = null;
+    if (type !== 'move') state.savedVerticalOffset = null;
 
-    switch (type){
-        case "move":
-            returnRows.push(benchmarkCall(context, state, action, "handleMovement", () => handleMovement(state, action.key, action.shift)));
+    switch (type) {
+        case 'move':
+            returnRows.push(
+                benchmarkCall(context, state, action, 'handleMovement', () =>
+                    handleMovement(state, action.key, action.shift),
+                ),
+            );
             break;
-        case "undo":
-            returnRows.push(benchmarkCall(context, state, action, "undo", () => undo(history, state)));
+        case 'undo':
+            returnRows.push(
+                benchmarkCall(context, state, action, 'undo', () => undo(history, state)),
+            );
             break;
-        case "redo":
-            returnRows.push(benchmarkCall(context, state, action, "redo", () => redo(history, state)));;
+        case 'redo':
+            returnRows.push(
+                benchmarkCall(context, state, action, 'redo', () => redo(history, state)),
+            );
             break;
-        case "cut":
-            returnRows.push(benchmarkCall(context, state, action, "pushToUndo", () => pushToUndo(state, history, type)));
-            returnRows.push(benchmarkCall(context, state, action, "removeSelectedText", () => removeSelectedText(state)));
+        case 'cut':
+            returnRows.push(
+                benchmarkCall(context, state, action, 'pushToUndo', () =>
+                    pushToUndo(state, history, type),
+                ),
+            );
+            returnRows.push(
+                benchmarkCall(context, state, action, 'removeSelectedText', () =>
+                    removeSelectedText(state),
+                ),
+            );
             break;
-        case "insert":
-            const {text, paste} = action;
-            returnRows.push(benchmarkCall(context, state, action, "pushToUndo", () => pushToUndo(state, history, type)));
-            if (paste){
-                returnRows.push(benchmarkCall(context, state, action, "pasteText", () => insertText(state, text)));
+        case 'insert':
+            const { text, paste } = action;
+            returnRows.push(
+                benchmarkCall(context, state, action, 'pushToUndo', () =>
+                    pushToUndo(state, history, type),
+                ),
+            );
+            if (paste) {
+                returnRows.push(
+                    benchmarkCall(context, state, action, 'pasteText', () =>
+                        insertText(state, text),
+                    ),
+                );
             } else {
-                returnRows.push(benchmarkCall(context, state, action, "insertText", () => insertCharacters(state, text)));
+                returnRows.push(
+                    benchmarkCall(context, state, action, 'insertText', () =>
+                        insertCharacters(state, text),
+                    ),
+                );
             }
             break;
-        case "backspace":
-            returnRows.push(benchmarkCall(context, state, action, "pushToUndo", () => pushToUndo(state, history, type)));
-            returnRows.push(benchmarkCall(context, state, action, "handleBackspace", () => handleBackspace(state)));
+        case 'backspace':
+            returnRows.push(
+                benchmarkCall(context, state, action, 'pushToUndo', () =>
+                    pushToUndo(state, history, type),
+                ),
+            );
+            returnRows.push(
+                benchmarkCall(context, state, action, 'handleBackspace', () =>
+                    handleBackspace(state),
+                ),
+            );
             break;
-        case "enter":
-            returnRows.push(benchmarkCall(context, state, action, "pushToUndo", () => pushToUndo(state, history, type)));
-            returnRows.push(benchmarkCall(context, state, action, "handleEnter", () => handleEnter(state)));
+        case 'enter':
+            returnRows.push(
+                benchmarkCall(context, state, action, 'pushToUndo', () =>
+                    pushToUndo(state, history, type),
+                ),
+            );
+            returnRows.push(
+                benchmarkCall(context, state, action, 'handleEnter', () => handleEnter(state)),
+            );
             break;
-        case "tab":
-            returnRows.push(benchmarkCall(context, state, action, "pushToUndo", () => pushToUndo(state, history, type)));
-            returnRows.push(benchmarkCall(context, state, action, "handleTab", () => handleTab(state)));
+        case 'tab':
+            returnRows.push(
+                benchmarkCall(context, state, action, 'pushToUndo', () =>
+                    pushToUndo(state, history, type),
+                ),
+            );
+            returnRows.push(
+                benchmarkCall(context, state, action, 'handleTab', () => handleTab(state)),
+            );
             break;
     }
-    returnRows.push(benchmarkCall(context, state, action, "renderDOM", () => renderDOM(state)));
+    returnRows.push(benchmarkCall(context, state, action, 'renderDOM', () => renderDOM(state)));
     return returnRows;
 }
-
 
 function writeCSV(rows: BenchmarkRow[]): void {
     if (rows.length === 0) return;
 
     const headers = Object.keys(rows[0]!) as (keyof BenchmarkRow)[];
 
-    const escapeCSV = (value: unknown): string =>
-        `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const escapeCSV = (value: unknown): string => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
     const csv = [
-        headers.map(escapeCSV).join(","),
-        ...rows.map(row =>
-            headers.map(header => escapeCSV(row[header])).join(",")
-        )
-    ].join("\r\n");
+        headers.map(escapeCSV).join(','),
+        ...rows.map((row) => headers.map((header) => escapeCSV(row[header])).join(',')),
+    ].join('\r\n');
 
     const blob = new Blob([csv], {
-        type: "text/csv;charset=utf-8;"
+        type: 'text/csv;charset=utf-8;',
     });
 
     const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
+    const link = document.createElement('a');
 
     link.href = url;
     link.download = CSV_FILE_NAME;
@@ -190,22 +242,29 @@ type BenchmarkScenario = {
 };
 
 type BenchmarkRow = {
-  implementation: string;
-  operation: string;
-  functionName: string;
-  durationMS: number;
-  cursorIndex: number;
-  documentChars: number;
-  documentLines: number;
-  currentLineChars: number;
-  payloadLength: number;
-  selectionLength: number;
-  timestamp: number;
+    implementation: string;
+    operation: string;
+    functionName: string;
+    durationMS: number;
+    cursorIndex: number;
+    documentChars: number;
+    documentLines: number;
+    currentLineChars: number;
+    payloadLength: number;
+    selectionLength: number;
+    timestamp: number;
 };
 
-function prepareState(state: TextEditorState, history: EditorHistory, documentLines: number, 
-        lineLength: number, cursorPercent: number): void {
-    const lines = Array.from({ length: Math.max(1, documentLines) }, () => "x".repeat(Math.max(1, lineLength)));
+function prepareState(
+    state: TextEditorState,
+    history: EditorHistory,
+    documentLines: number,
+    lineLength: number,
+    cursorPercent: number,
+): void {
+    const lines = Array.from({ length: Math.max(1, documentLines) }, () =>
+        'x'.repeat(Math.max(1, lineLength)),
+    );
 
     changeLines(state, history, lines);
 
@@ -218,38 +277,38 @@ function prepareState(state: TextEditorState, history: EditorHistory, documentLi
 }
 
 function createPayload(length: number): string {
-    return "x".repeat(Math.max(0, length));
+    return 'x'.repeat(Math.max(0, length));
 }
 
 function constructAction(type: ActionType, payloadLength: number): EditorAction {
     switch (type) {
-        case "insert":
-            return { type: "insert", text: createPayload(payloadLength), paste: false };
-        case "enter":
-            return { type: "enter" };
-        case "backspace":
-            return { type: "backspace" };
-        case "tab":
-            return { type: "tab" };
-        case "cut":
-            return { type: "cut" };
-        case "undo":
-            return { type: "undo" };
-        case "redo":
-            return { type: "redo" };
-        case "move":
+        case 'insert':
+            return { type: 'insert', text: createPayload(payloadLength), paste: false };
+        case 'enter':
+            return { type: 'enter' };
+        case 'backspace':
+            return { type: 'backspace' };
+        case 'tab':
+            return { type: 'tab' };
+        case 'cut':
+            return { type: 'cut' };
+        case 'undo':
+            return { type: 'undo' };
+        case 'redo':
+            return { type: 'redo' };
+        case 'move':
             return {
-                type: "move",
-                key: payloadLength % 2 === 0 ? "ArrowLeft" : "ArrowRight", // doesn't test vertical movement
+                type: 'move',
+                key: payloadLength % 2 === 0 ? 'ArrowLeft' : 'ArrowRight', // doesn't test vertical movement
                 shift: false,
             };
         default:
-            return { type: "insert", text: "", paste: false };
+            return { type: 'insert', text: '', paste: false };
     }
 }
 
 function yieldToBrowser(): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, 0));
+    return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 async function test(): Promise<void> {
@@ -274,7 +333,16 @@ async function test(): Promise<void> {
                         payloadLength,
                     };
 
-                    for (const type of ["insert", "enter", "backspace", "tab", "cut", "undo", "redo", "move"] as ActionType[]) {
+                    for (const type of [
+                        'insert',
+                        'enter',
+                        'backspace',
+                        'tab',
+                        'cut',
+                        'undo',
+                        'redo',
+                        'move',
+                    ] as ActionType[]) {
                         const action: EditorAction = constructAction(type, payloadLength);
                         prepareState(state, history, documentLines, lineLength, cursorPercent);
                         rows.push(...timeHandler(context, state, history, action));

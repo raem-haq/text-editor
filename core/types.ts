@@ -8,7 +8,7 @@ export type Selection = {
     focus: Position;
 };
 
-type Cursor = Position;
+export type Cursor = Position;
 
 export type TextEditorState = {
     lines: string[];
@@ -25,13 +25,4 @@ export type LineSplice = {
     removeNo: number;
     insertNo: number;
     endLine: number;
-};
-
-//I believe this should be defined here as this
-//is dependant on the internal representation
-export type EditorMemento = {
-    lines: string[];
-    cursor: Cursor;
-    selection: Selection;
-    time: number;
 };

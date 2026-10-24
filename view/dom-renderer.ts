@@ -1,4 +1,4 @@
-const textBox: HTMLDivElement = document.querySelector<HTMLDivElement>('#text-box')!;
+import type { TextEditorState, LineSplice, Selection } from '../core/types';
 
 const PLACEHOLDER = 'Click to edit here';
 const placeholder: HTMLDivElement = document.querySelector<HTMLDivElement>('#placeholder')!;
@@ -41,7 +41,7 @@ function addSelectionToLine(lineElem: Element, startI: number, endI?: number) {
     lineElem.append(afterSelection);
 }
 
-function addSelection(lineElems: HTMLCollection, selection: Selection) {
+function addSelection(lineElems: HTMLCollection, selection: Selection | null) {
     if (selection === null) return;
     let { anchor: start, focus: end } = selection;
 
@@ -58,7 +58,6 @@ function addSelection(lineElems: HTMLCollection, selection: Selection) {
         addSelectionToLine(lineElems[end.line]!, 0, end.offset);
     }
 }
-
 
 function performLineSplice(change: LineSplice) {
     const { startLine, removeNo, insertNo } = change;
@@ -89,7 +88,7 @@ function replaceDOMLines(state: TextEditorState, change: LineSplice) {
     addSelection(linesDOM, state.selection);
 }
 
-function renderDOMchange(state: TextEditorState, change: LineSplice | null) {
+export function renderDOMchange(state: TextEditorState, change: LineSplice | null): void {
     placeholder.hidden = !(state.lines.length === 1 && state.lines[0] === '');
     if (change === null) return;
     performLineSplice(change);

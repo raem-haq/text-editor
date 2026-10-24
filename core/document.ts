@@ -68,6 +68,7 @@ function moveCursor(state: TextEditorState, key: ArrowKey): void {
 }
 
 function insertCharacters(state: TextEditorState, text: string): void {
+    state.savedVerticalOffset = null;
     const { lines, cursor, selection } = state;
     if (selection !== null) removeSelectedText(state);
     lines[cursor.line] = insertInString(lines[cursor.line]!, cursor.offset, text);
@@ -75,6 +76,7 @@ function insertCharacters(state: TextEditorState, text: string): void {
 }
 
 function performEnter(state: TextEditorState): void {
+    state.savedVerticalOffset = null;
     if (state.selection !== null) removeSelectedText(state);
     const { lines, cursor } = state;
     const currentLine = lines[cursor.line]!;
@@ -87,6 +89,7 @@ function performEnter(state: TextEditorState): void {
 }
 
 export function handleBackspace(state: TextEditorState): LineSplice | null {
+    state.savedVerticalOffset = null;
     if (state.selection !== null) return removeSelectionAndGetLineSplice(state);
 
     const { lines, cursor } = state;
@@ -124,15 +127,21 @@ function getRemovedSelectionLineSplice(state: TextEditorState): LineSplice | nul
     };
 }
 
+function insertTabsNoSelection(state: TextEditorState): void {
+    const { lines, cursor } = state;
+    state.savedVerticalOffset = null;
+    const noOfSpaces = 4 - (cursor.offset % 4);
+    lines[cursor.line] = insertInString(lines[cursor.line]!, cursor.offset, ' '.repeat(noOfSpaces));
+    cursor.offset += noOfSpaces;
+}
+
 export function handleTab(state: TextEditorState): LineSplice | null {
     const { lines, cursor } = state;
     if (state.selection !== null) {
         manageTabsSelection(state);
         return getRemovedSelectionLineSplice(state);
     }
-    const noOfSpaces = 4 - (cursor.offset % 4);
-    lines[cursor.line] = insertInString(lines[cursor.line]!, cursor.offset, ' '.repeat(noOfSpaces));
-    cursor.offset += noOfSpaces;
+    insertTabsNoSelection(state);
     return { startLine: cursor.line, insertNo: 0, removeNo: 0, endLine: cursor.line };
 }
 
@@ -243,6 +252,7 @@ export function handleMovement(state: TextEditorState, key: ArrowKey, shift: boo
 }
 
 function manageTabsSelection(state: TextEditorState): void {
+    state.savedVerticalOffset = null;
     if (state.selection === null) return;
     let { anchor: start, focus: end } = state.selection;
 
