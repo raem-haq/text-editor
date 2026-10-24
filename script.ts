@@ -204,7 +204,7 @@ function addCursor(line : HTMLDivElement, cursorPos : number) {
     return cursor;
 }
 
-function addSelectionToLine(lineElem : HTMLDivElement, startI: number, endI? :number) {
+function addSelectionToLine(lineElem : Element, startI: number, endI? :number) {
     const highlighted : HTMLSpanElement = document.createElement("span");
     highlighted.className = "selection";
     const lineText : string = lineElem.textContent;
@@ -223,7 +223,7 @@ function addSelectionToLine(lineElem : HTMLDivElement, startI: number, endI? :nu
     lineElem.append(afterSelection);
 }
 
-function addSelection(lineElems : HTMLDivElement[], selection : Selection){
+function addSelection(lineElems : HTMLCollection, selection : Selection){
     if (selection === null) return;
     let {anchor: start, active: end} = selection;
 
@@ -325,7 +325,7 @@ function moveCursor(state: TextEditorState, key : ArrowKey): void {
     }
 }
 
-export function insertText(state: TextEditorState, text: string): void {
+export function insertCharacters(state: TextEditorState, text: string): void {
     const {lines, cursor, selection} = state;
     if (selection !== null) removeSelectedText(state);
     lines[cursor.line] = insertInString(lines[cursor.line]!, cursor.column, text);
@@ -384,15 +384,22 @@ export function handleTab(state: TextEditorState): LineSplice | null {
     return {startLine: cursor.line, insertNo:0, removeNo:0, endLine: cursor.line};
 }
 
-export function pasteText(state: TextEditorState, text : string): void {
-    if (state.selection !== null) removeSelectedText(state);
+export function insertText(state: TextEditorState, text : string): LineSplice {
+    const selectionChange = state.selection !== null ? removeSelectedText(state) : null;
+    const startLine = selectionChange?.startLine ?? state.cursor.line;
     const linesSplit : string[] = text.split("\n");
     
-    insertText(state, linesSplit[0]!);
+    insertCharacters(state, linesSplit[0]!);
     for (let i = 1; i < linesSplit.length; i++){
         handleEnter(state);
-        insertText(state, linesSplit[i]!);
+        insertCharacters(state, linesSplit[i]!);
     }
+    return {
+        startLine,
+        removeNo: selectionChange?.removeNo ?? 0,
+        insertNo: linesSplit.length - 1,
+        endLine: startLine + linesSplit.length - 1,
+    };
 }
 
 export function removeSelectedText(state: TextEditorState) : LineSplice | null {
@@ -495,11 +502,7 @@ function eventHandler(state: TextEditorState, history: EditorHistory, action : E
         case "insert":
             const {text, paste} = action;
             pushToUndo(state, history, type);
-            if (paste){
-                change= pasteText(state, text);
-            } else {
-                change= insertText(state, text)
-            }
+            change= insertText(state, text);
             break;
         case "backspace":
             pushToUndo(state, history, type);
@@ -638,4 +641,3 @@ textBox.addEventListener("paste", (event) => {
     }
     eventHandler(state, history, e);
 });
-
