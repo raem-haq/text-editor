@@ -518,6 +518,42 @@ function eventHandler(state: TextEditorState, history: EditorHistory, action : E
 }
 
 
+function performLineSplice(change: LineSplice){
+    const {startLine, removeNo, insertNo} = change;
+    const linesDOM: HTMLCollection= document.getElementById("text-box")!.children;
+    const startDiv: Element = linesDOM.item(startLine-1)!;
+    let currLine = startDiv;
+    for (let i = 0; i < removeNo; i++){
+        const nextLine: Element | null = currLine.nextElementSibling;
+        if (nextLine === null) throw new Error("LineSplice incorrect");
+        currLine.remove();
+        currLine = nextLine;
+    }
+    currLine = startDiv;
+    for (let i = 0; i < insertNo; i++){
+        const newLine = document.createAttribute("div");
+        currLine = currLine.nextElementSibling!;
+        document.insertBefore(newLine, currLine);
+    }
+}
+
+function replaceDOMLines(state: TextEditorState, change: LineSplice){
+    const {startLine, endLine} = change;
+    const linesDOM: HTMLCollection= document.getElementById("text-box")!.children;
+    for (let i = startLine; i <= endLine; i++){
+        linesDOM.item(i)!.textContent = state.lines[i]!;
+    }
+    addCursor(linesDOM[state.cursor.line]! as HTMLDivElement, state.cursor.column);
+    addSelection(linesDOM, state.selection);
+}
+
+function renderDOMchange(state: TextEditorState, change: LineSplice|null){
+    if (change === null) return;
+    performLineSplice(change);
+    replaceDOMLines(state, change);
+}
+
+
 function copyHandler(e: ClipboardEvent, state: TextEditorState){ 
     // doesn't modify editor variables or undo logic
     if (!e.clipboardData) return;
