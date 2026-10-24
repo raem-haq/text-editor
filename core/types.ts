@@ -1,5 +1,3 @@
-export type ArrowKey = 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight';
-
 export type Position = {
     line: number;
     offset: number;

@@ -1,4 +1,5 @@
-import type { ArrowKey, Position, Selection, TextEditorState, LineSplice } from './types';
+import type { Position, Selection, TextEditorState, LineSplice } from './types';
+import type { ArrowKey } from '../input/keyboard';
 
 export function initialiseState(): TextEditorState {
     return {
@@ -9,8 +10,8 @@ export function initialiseState(): TextEditorState {
     };
 }
 
-function insertInString(s: string, i: number, v: string): string {
-    return s.slice(0, i) + v + s.slice(i);
+function insertInString(s: string, i: number, val: string): string {
+    return s.slice(0, i) + val + s.slice(i);
 }
 
 function removeAt(value: string, i: number): string {
@@ -239,4 +240,37 @@ export function handleMovement(state: TextEditorState, key: ArrowKey, shift: boo
     change.endLine = Math.max(change.endLine, cursor.line);
     change.startLine = Math.min(change.startLine, cursor.line);
     return change;
+}
+
+function manageTabsSelection(state: TextEditorState): void {
+    if (state.selection === null) return;
+    let { anchor: start, focus: end } = state.selection;
+
+    if (start.line > end.line || (start.line == end.line && start.offset > end.offset)) {
+        [start, end] = [end, start];
+    }
+    const changes: LineSplice = {
+        startLine: start.line,
+        insertNo: 0,
+        removeNo: 0,
+        endLine: end.line,
+    };
+
+    if (start.line == end.line) {
+        const line = state.lines[start.line]!;
+        const noOfSpaces = 4 - (start.offset % 4);
+        state.lines[start.line] = line
+            .slice(0, start.offset)
+            .concat(' '.repeat(noOfSpaces))
+            .concat(line.slice(end.offset));
+        state.selection = null;
+        state.cursor.offset = start.offset + noOfSpaces;
+    } else {
+        for (let i = start.line; i <= end.line; i++) {
+            state.lines[i] = ' '.repeat(4).concat(state.lines[i]!);
+        }
+        state.selection.anchor.offset += 4;
+        state.selection.focus.offset += 4;
+        state.cursor.offset += 4;
+    }
 }
