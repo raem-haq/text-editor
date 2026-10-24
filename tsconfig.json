@@ -1,17 +1,17 @@
 {
-  "compilerOptions": {
-    "module": "esnext",
-    "target": "esnext",
-    "types": [],
-    "outDir": "./build",
-    "sourceMap": true,
-    "declaration": true,
-    "declarationMap": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "strict": true,
-    "jsx": "react-jsx",
-    "isolatedModules": true,
-    "skipLibCheck": true
-  }
+    "compilerOptions": {
+        "module": "esnext",
+        "target": "esnext",
+        "types": [],
+        "outDir": "./build",
+        "sourceMap": true,
+        "declaration": true,
+        "declarationMap": true,
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true,
+        "strict": true,
+        "jsx": "react-jsx",
+        "isolatedModules": true,
+        "skipLibCheck": true
+    }
 }
