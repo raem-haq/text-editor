@@ -1,11 +1,13 @@
+export type ArrowKey = 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight';
+
 export type Position = {
     line: number;
-    column: number;
+    offset: number;
 };
 
 export type Selection = {
     anchor: Position;
-    active: Position;
+    focus: Position;
 };
 
 type Cursor = Position;
@@ -14,7 +16,7 @@ export type TextEditorState = {
     lines: string[];
     cursor: Cursor;
     selection: Selection | null;
-    savedVerticalCursorIndex: number | null;
+    savedVerticalOffset: number | null;
 };
 
 // Behaves like the splice() function
@@ -25,7 +27,7 @@ export type LineSplice = {
     removeNo: number;
     insertNo: number;
     endLine: number;
-}
+};
 
 //I believe this should be defined here as this
 //is dependant on the internal representation
@@ -35,4 +37,3 @@ export type EditorMemento = {
     selection: Selection;
     time: number;
 };
-
