@@ -66,8 +66,7 @@ function performLineSplice(change: LineSplice) {
     for (let i = 0; i < removeNo; i++) {
         const nextLine: Element | null = currLine.nextElementSibling;
         if (nextLine === null) throw new Error('LineSplice incorrect');
-        currLine.remove();
-        currLine = nextLine;
+        nextLine.remove();
     }
 
     for (let i = 0; i < insertNo; i++) {
