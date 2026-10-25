@@ -134,10 +134,11 @@ function insertTabsNoSelection(state: TextEditorState): void {
 }
 
 export function handleTab(state: TextEditorState): LineSplice | null {
-    const { cursor, selection } = state;
-    if (state.selection !== null) {
-        const startLine = Math.min(selection!.anchor.line, selection!.focus.line);
-        const endLine = Math.max(selection!.anchor.line, selection!.focus.line);
+    const { cursor } = state;
+    const selection = state.selection;
+    if (selection !== null) {
+        const startLine = Math.min(selection.anchor.line, selection.focus.line);
+        const endLine = Math.max(selection.anchor.line, selection.focus.line);
         manageTabsSelection(state);
         return { startLine, insertNo: 0, removeNo: 0, endLine };
     }
@@ -262,13 +263,6 @@ function manageTabsSelection(state: TextEditorState): void {
     if (start.line > end.line || (start.line == end.line && start.offset > end.offset)) {
         [start, end] = [end, start];
     }
-    const changes: LineSplice = {
-        startLine: start.line,
-        insertNo: 0,
-        removeNo: 0,
-        endLine: end.line,
-    };
-
     if (start.line == end.line) {
         const line = state.lines[start.line]!;
         const noOfSpaces = 4 - (start.offset % 4);

@@ -17,9 +17,7 @@ export type TextEditorState = {
     savedVerticalOffset: number | null;
 };
 
-// Behaves like the splice() function
-// As some functions mutate the lines in place, an
-// endLine value is included
+// The start line is preserved; removeNo and insertNo count following lines.
 export type LineSplice = {
     startLine: number;
     removeNo: number;

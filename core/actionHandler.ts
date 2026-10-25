@@ -6,7 +6,7 @@ import {
     removeSelectionAndGetLineSplice,
     handleTab,
     handleText,
-} from './document';
+} from './document.js';
 
 export function actionHandler(state: TextEditorState, action: EditorAction): LineSplice | null {
     switch (action.type) {
