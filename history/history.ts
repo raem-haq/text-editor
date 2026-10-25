@@ -24,12 +24,13 @@ function actionToBlockCategory(action: EditorAction): BlockCategory | null {
         case 'backspace':
         case 'cut':
         case 'enter':
+            return action.type;
         case 'insert':
-            return type;
+            return action.text === ' ' ? 'space' : 'insert';
         case 'paste':
             return 'insert';
         case 'tab':
-            return type;
+            return action.type;
         case 'move':
         case 'redo':
         case 'undo':
