@@ -1,5 +1,5 @@
 import type { BackendMemento, Position } from './types.js';
-import type { TextBackend } from './backend-types.js';
+import type { TextBackend } from './backendTypes.js';
 export type ArrayLinesMemento = {
     readonly kind: 'array-lines';
     readonly lines: readonly string[];

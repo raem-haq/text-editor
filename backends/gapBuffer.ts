@@ -1,7 +1,7 @@
-import type { BackendMemento } from '../types.js';
-import type { TextBackend } from './backend-types.js';
+import type { BackendMemento, Position } from './types.js';
+import type { TextBackend } from './backendTypes.js';
 
-
+export type GapBufferMemento = Extract<BackendMemento, { kind: 'gap-buffer' }>;
 
 export class GapBufferBackend implements TextBackend {
     readonly kind = 'gap-buffer';
@@ -72,17 +72,18 @@ export class GapBufferBackend implements TextBackend {
         return this.textCache;
     }
 
-    getCursor(): number {
-        return this.cursorOffset;
+    getCursor(): Position {
+        return this.offsetToPosition(this.cursorOffset);
     }
 
-    moveCursor(offset: number): void {
+    moveCursor(position: Position): void {
+        const offset = this.positionToOffset(position);
         this.moveToOffset(offset);
     }
 
-    insertText(offset: number, text: string): void {
+    insertText(position: Position, text: string): void {
         if (text === '') return;
-        const bounded = this.boundOffset(offset);
+        const bounded = this.positionToOffset(position);
         this.moveToOffset(bounded);
         this.ensureGapCapacity(text.length);
         this.ensureWritableBuffer();
@@ -92,9 +93,9 @@ export class GapBufferBackend implements TextBackend {
         this.textCache = null;
     }
 
-    deleteRange(start: number, end: number): void {
-        let startOffset = this.boundOffset(start);
-        let endOffset = this.boundOffset(end);
+    deleteRange(start: Position, end: Position): void {
+        let startOffset = this.positionToOffset(start);
+        let endOffset = this.positionToOffset(end);
         if (startOffset > endOffset) [startOffset, endOffset] = [endOffset, startOffset];
         if (startOffset === endOffset) return;
 
@@ -104,11 +105,47 @@ export class GapBufferBackend implements TextBackend {
         this.textCache = null;
     }
 
-    getTextRange(start: number, end: number): string {
-        let startOffset = this.boundOffset(start);
-        let endOffset = this.boundOffset(end);
+    getTextRange(start: Position, end: Position): string {
+        let startOffset = this.positionToOffset(start);
+        let endOffset = this.positionToOffset(end);
         if (startOffset > endOffset) [startOffset, endOffset] = [endOffset, startOffset];
         return this.readRange(startOffset, endOffset);
+    }
+
+    positionToOffset(position: Position): number {
+        if (!Number.isInteger(position.line) || !Number.isInteger(position.offset)) {
+            throw new RangeError('Position must contain integer values.');
+        }
+        if (position.line < 0 || position.line >= this.lineCount) {
+            throw new RangeError('Position is out of range.');
+        }
+        const text = this.text;
+        let lineStart = 0;
+        for (let line = 0; line < position.line; line++) {
+            const newline = text.indexOf('\n', lineStart);
+            if (newline === -1) throw new RangeError('Position is out of range.');
+            lineStart = newline + 1;
+        }
+        const newline = text.indexOf('\n', lineStart);
+        const lineEnd = newline === -1 ? text.length : newline;
+        if (position.offset < 0 || position.offset > lineEnd - lineStart) {
+            throw new RangeError('Position is out of range.');
+        }
+        return lineStart + position.offset;
+    }
+
+    offsetToPosition(offset: number): Position {
+        const bounded = this.boundOffset(offset);
+        const text = this.text;
+        let line = 0;
+        let lineStart = 0;
+        for (let i = 0; i < bounded; i++) {
+            if (text[i] === '\n') {
+                line++;
+                lineStart = i + 1;
+            }
+        }
+        return { line, offset: bounded - lineStart };
     }
 
     captureMemento(): GapBufferMemento {
