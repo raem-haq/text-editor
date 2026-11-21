@@ -1,7 +1,5 @@
-type PieceSource = 'original' | 'add';
-
 type Piece = {
-    source: PieceSource;
+    source: 'original' | 'add';
     start: number;
     length: number;
 };
