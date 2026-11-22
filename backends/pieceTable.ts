@@ -1,10 +1,16 @@
-import type { BackendMemento, PieceTableNode, PieceTablePiece, Position } from './types.js';
-import type { TextBackend } from './backendTypes.js';
+import type {
+    BackendMemento,
+    PieceTableNode,
+    PieceTablePiece,
+    TextBackend,
+} from './types.js';
+import type { Position } from '../model/types.js';
 
 type Node = PieceTableNode;
 type Piece = PieceTablePiece;
 
-export type PieceTableMemento = Extract<BackendMemento, { kind: 'piece-table' }>;
+type PieceTableMemento = Extract<BackendMemento, { kind: 'piece-table' }>;
+
 
 export class PieceTableBackend implements TextBackend {
     readonly kind = 'piece-table';
@@ -81,7 +87,7 @@ export class PieceTableBackend implements TextBackend {
     }
 
     positionToOffset(position: Position): number {
-        if (!Number.isInteger(position.line) || !Number.isInteger(position.offset)) {
+        if (!Number.isInteger(position.line) || !Number.isInteger(position.column)) {
             throw new RangeError('Position must contain integer values.');
         }
         if (position.line < 0 || position.line >= this.lineCount) {
@@ -92,10 +98,10 @@ export class PieceTableBackend implements TextBackend {
             position.line + 1 < this.lineCount
                 ? this.newlineOffset(position.line)
                 : this.length;
-        if (position.offset < 0 || position.offset > lineEnd - lineStart) {
+        if (position.column < 0 || position.column > lineEnd - lineStart) {
             throw new RangeError('Position is out of range.');
         }
-        return lineStart + position.offset;
+        return lineStart + position.column;
     }
 
     offsetToPosition(offset: number): Position {
@@ -108,7 +114,7 @@ export class PieceTableBackend implements TextBackend {
                 lineStart = i + 1;
             }
         }
-        return { line, offset: bounded - lineStart };
+        return { line, column: bounded - lineStart };
     }
 
     captureMemento(): PieceTableMemento {
@@ -173,26 +179,6 @@ export class PieceTableBackend implements TextBackend {
             throw new RangeError('Line is out of range.');
         }
         return newline - piece.start;
-    }
-
-    private countNewlinesBefore(node: Node | null, offset: number): number {
-        if (!node || offset <= 0) return 0;
-
-        const leftLength = this.subtreeLength(node.left);
-        if (offset <= leftLength) return this.countNewlinesBefore(node.left, offset);
-
-        let count = this.subtreeNewlineCount(node.left);
-        const withinPiece = Math.min(node.piece.length, offset - leftLength);
-        count += this.countNewlinesInSource(
-            this.sourceFor(node.piece),
-            node.piece.start,
-            node.piece.start + withinPiece,
-        );
-        if (offset <= leftLength + node.piece.length) return count;
-
-        return (
-            count + this.countNewlinesBefore(node.right, offset - leftLength - node.piece.length)
-        );
     }
 
     private countNewlinesInSource(source: string, start: number, end: number): number {
