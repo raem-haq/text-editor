@@ -1,12 +1,4 @@
-export type Position = {
-    line: number;
-    offset: number;
-};
-
-export type Selection = {
-    anchor: Position;
-    focus: Position;
-};
+import type { Position } from '../model/types.js';
 
 export type PieceTablePiece = {
     readonly source: 'original' | 'add';
@@ -46,19 +38,21 @@ export type BackendMemento =
           readonly priorityState: number;
       };
 
-export type Cursor = Position;
+export interface TextBackend {
+    readonly kind: BackendMemento['kind'];
+    readonly length: number;
+    readonly lineCount: number;
+    readonly text: string;
 
-export type TextEditorState = {
-    lines: string[];
-    cursor: Cursor;
-    selection: Selection | null;
-    savedVerticalOffset: number | null;
-};
+    getCursor(): Position;
+    getLine(line: number): string;
+    moveCursor(position: Position): void;
+    insertText(position: Position, text: string): void;
+    deleteRange(start: Position, end: Position): void;
+    getTextRange(start: Position, end: Position): string;
 
-// The start line is preserved; removeNo and insertNo count following lines.
-export type LineSplice = {
-    startLine: number;
-    removeNo: number;
-    insertNo: number;
-    endLine: number;
-};
+    positionToOffset(position: Position): number;
+    offsetToPosition(offset: number): Position;
+    captureMemento(): BackendMemento;
+    restoreMemento(memento: BackendMemento): void;
+}

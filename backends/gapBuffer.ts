@@ -1,5 +1,5 @@
-import type { BackendMemento, Position } from './types.js';
-import type { TextBackend } from './backendTypes.js';
+import type { BackendMemento, TextBackend } from './types.js';
+import type { Position } from '../model/types.js';
 
 export type GapBufferMemento = Extract<BackendMemento, { kind: 'gap-buffer' }>;
 
@@ -113,7 +113,7 @@ export class GapBufferBackend implements TextBackend {
     }
 
     positionToOffset(position: Position): number {
-        if (!Number.isInteger(position.line) || !Number.isInteger(position.offset)) {
+        if (!Number.isInteger(position.line) || !Number.isInteger(position.column)) {
             throw new RangeError('Position must contain integer values.');
         }
         if (position.line < 0 || position.line >= this.lineCount) {
@@ -128,10 +128,10 @@ export class GapBufferBackend implements TextBackend {
         }
         const newline = text.indexOf('\n', lineStart);
         const lineEnd = newline === -1 ? text.length : newline;
-        if (position.offset < 0 || position.offset > lineEnd - lineStart) {
+        if (position.column < 0 || position.column > lineEnd - lineStart) {
             throw new RangeError('Position is out of range.');
         }
-        return lineStart + position.offset;
+        return lineStart + position.column;
     }
 
     offsetToPosition(offset: number): Position {
@@ -145,7 +145,7 @@ export class GapBufferBackend implements TextBackend {
                 lineStart = i + 1;
             }
         }
-        return { line, offset: bounded - lineStart };
+        return { line, column: bounded - lineStart };
     }
 
     captureMemento(): GapBufferMemento {

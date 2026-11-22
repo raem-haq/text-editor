@@ -1,16 +1,13 @@
-import type { BackendMemento, Position } from './types.js';
-import type { TextBackend } from './backendTypes.js';
-export type ArrayLinesMemento = {
-    readonly kind: 'array-lines';
-    readonly lines: readonly string[];
-    readonly cursor: Position;
-};
+import type { BackendMemento, TextBackend } from './types.js';
+import type { Position } from '../model/types.js';
+
+type ArrayLinesMemento = Extract<BackendMemento, { kind: 'array-lines' }>;
 
 export class ArrayLinesBackend implements TextBackend {
     readonly kind = 'array-lines';
     private lines: string[];
     private lineOffsets: number[] = [];
-    private cursorPosition: Position = { line: 0, offset: 0 };
+    private cursorPosition: Position = { line: 0, column: 0 };
 
     constructor(text = '') {
         this.lines = text.split('\n');
@@ -51,8 +48,8 @@ export class ArrayLinesBackend implements TextBackend {
         if (
             position.line < 0 ||
             position.line >= this.lines.length ||
-            position.offset < 0 ||
-            position.offset > this.lines[position.line]!.length
+            position.column < 0 ||
+            position.column > this.lines[position.line]!.length
         ) {
             throw new RangeError('Position is out of range.');
         }
@@ -65,23 +62,23 @@ export class ArrayLinesBackend implements TextBackend {
 
         if (insertedLines.length === 1) {
             this.lines[position.line] =
-                originalLine.slice(0, position.offset) +
+                originalLine.slice(0, position.column) +
                 insertedLines[0]! +
-                originalLine.slice(position.offset);
+                originalLine.slice(position.column);
             this.cursorPosition = {
                 line: position.line,
-                offset: position.offset + insertedLines[0]!.length,
+                column: position.column + insertedLines[0]!.length,
             };
         } else {
-            this.lines[position.line] = originalLine.slice(0, position.offset) + insertedLines[0];
+            this.lines[position.line] = originalLine.slice(0, position.column) + insertedLines[0];
 
             for (let i = 1; i < insertedLines.length; i++) {
                 this.lines.splice(position.line + i, 0, insertedLines[i]!);
             }
-            this.lines[position.line + insertedLines.length - 1] += originalLine.slice(position.offset);
+            this.lines[position.line + insertedLines.length - 1] += originalLine.slice(position.column);
             this.cursorPosition = {
                 line: position.line + insertedLines.length - 1,
-                offset: insertedLines.at(-1)!.length,
+                column: insertedLines.at(-1)!.length,
             };
         }
 
@@ -98,11 +95,11 @@ export class ArrayLinesBackend implements TextBackend {
 
         if (start.line === end.line) {
             const line = this.lines[start.line]!;
-            this.lines[start.line] = line.slice(0, start.offset) + line.slice(end.offset);
+            this.lines[start.line] = line.slice(0, start.column) + line.slice(end.column);
         } else {
             const joined =
-                this.lines[start.line]!.slice(0, start.offset) +
-                this.lines[end.line]!.slice(end.offset);
+                this.lines[start.line]!.slice(0, start.column) +
+                this.lines[end.line]!.slice(end.column);
             this.lines.splice(start.line, end.line - start.line + 1, joined);
         }
 
@@ -117,20 +114,20 @@ export class ArrayLinesBackend implements TextBackend {
         let end = { ...endPosition };
         if (this.comparePositions(start, end) > 0) [start, end] = [end, start];
         if (start.line === end.line) {
-            return this.lines[start.line]!.slice(start.offset, end.offset);
+            return this.lines[start.line]!.slice(start.column, end.column);
         }
 
-        const pieces = [this.lines[start.line]!.slice(start.offset)];
+        const pieces = [this.lines[start.line]!.slice(start.column)];
         for (let line = start.line + 1; line < end.line; line++) {
             pieces.push(this.lines[line]!);
         }
-        pieces.push(this.lines[end.line]!.slice(0, end.offset));
+        pieces.push(this.lines[end.line]!.slice(0, end.column));
         return pieces.join('\n');
     }
 
     positionToOffset(position: Position): number {
         this.validatePosition(position);
-        return this.lineOffsets[position.line]! + position.offset;
+        return this.lineOffsets[position.line]! + position.column;
     }
 
     offsetToPosition(offset: number): Position {
@@ -145,7 +142,7 @@ export class ArrayLinesBackend implements TextBackend {
             if (this.lineOffsets[mid]! <= offset) low = mid;
             else high = mid - 1;
         }
-        return { line: low, offset: offset - this.lineOffsets[low]! };
+        return { line: low, column: offset - this.lineOffsets[low]! };
     }
 
     captureMemento(): ArrayLinesMemento {
@@ -175,6 +172,6 @@ export class ArrayLinesBackend implements TextBackend {
     }
 
     private comparePositions(a: Position, b: Position): number {
-        return a.line === b.line ? a.offset - b.offset : a.line - b.line;
+        return a.line === b.line ? a.column - b.column : a.line - b.line;
     }
 }
