@@ -4,6 +4,8 @@ import type { Position, Selection } from '../model/types.js';
 
 export class DOMRenderer {
     private decoratedLines = new Set<number>();
+    private readonly canvas = document.createElement('canvas');
+    private lastEditor: Editor | null = null;
 
     constructor(
         private readonly textBox: HTMLDivElement,
@@ -11,6 +13,7 @@ export class DOMRenderer {
     ) {}
 
     render(editor: Editor, change?: DocumentChange): void {
+        this.lastEditor = editor;
         this.textBox.classList.toggle('is-empty', editor.backend.length === 0); // currently doesn't do anything
         this.placeholder.hidden = editor.backend.length !== 0;
 
@@ -47,6 +50,44 @@ export class DOMRenderer {
         }
 
         this.decoratedLines = nextDecoratedLines;
+    }
+
+    positionFromMouse(event: MouseEvent): Position | null {
+        if (!(event.target instanceof Element)) return null;
+
+        let lineElement: Element | null = event.target;
+        while (lineElement !== null && lineElement.parentElement !== this.textBox) {
+            lineElement = lineElement.parentElement;
+        }
+        if (!(lineElement instanceof HTMLDivElement)) return null;
+
+        let line = 0;
+        while (
+            line < this.textBox.children.length &&
+            this.textBox.children.item(line) !== lineElement 
+        ) {
+            line++;
+        }
+        if (line === this.textBox.children.length) return null;
+
+        const editor = this.lastEditor; // we want to use the editor that was last rendered, not the current one, because the mouse event may have been triggered before the current render.
+        if (editor === null)
+            throw new Error('Cannot map mouse positions before the initial render.');
+        
+        // older browsers may not support caretPositionFromPoint, so we fall back to estimating the column based on the mouse position and the width of the text.
+        const documentPosition = document.caretPositionFromPoint?.(event.clientX, event.clientY);
+        if (documentPosition && lineElement.contains(documentPosition.offsetNode)) {
+            return {
+                line,
+                column: this.offsetWithinLine(
+                    lineElement,
+                    documentPosition.offsetNode,
+                    documentPosition.offset,
+                ),
+            };
+        }
+
+        return { line, column: this.estimateColumn(lineElement, line, event.clientX, editor) };
     }
 
     private createLine(): HTMLDivElement {
@@ -153,12 +194,72 @@ export class DOMRenderer {
             if (selectedStart === selectedEnd) {
                 const selectionElement = document.createElement('span');
                 selectionElement.className = 'selection';
+                selectionElement.dataset.emptySelection = 'true';
                 selectionElement.textContent = ' ';
                 element.append(selectionElement);
             }
             if (cursorAtEnd) appendCursor();
             appendText(selectedEnd, text.length);
         }
+    }
+    
+    offsetWithinLine(line: HTMLDivElement, target: Node, targetOffset: number): number {
+        const countBefore = (node: Node): number => {
+            if (node === target) {
+                if (node.nodeType === Node.TEXT_NODE) {
+                    if (node.parentElement?.dataset.emptySelection === 'true') return 0;
+                    return Math.max(0, Math.min(targetOffset, node.textContent?.length ?? 0));
+                }
+                let offset = 0;
+                for (let i = 0; i < targetOffset; i++) {
+                    const child = node.childNodes.item(i);
+                    if (child) offset += this.logicalTextLength(child);
+                }
+                return offset;
+            }
+
+            let offset = 0;
+            for (const child of node.childNodes) {
+                if (child === target || child.contains(target)) {
+                    return offset + countBefore(child);
+                }
+                offset += this.logicalTextLength(child);
+            }
+            return offset;
+        };
+
+        return Math.max(0, Math.min(countBefore(line), line.textContent?.length ?? 0));
+    }
+
+    private logicalTextLength(node: Node): number {
+        if (node instanceof HTMLElement && node.dataset.emptySelection === 'true') return 0;
+        if (node.nodeType === Node.TEXT_NODE) return node.textContent?.length ?? 0;
+        let length = 0;
+        for (const child of node.childNodes) length += this.logicalTextLength(child);
+        return length;
+    }
+
+    private estimateColumn(
+        lineElement: HTMLElement,
+        line: number,
+        clientX: number,
+        editor: Editor,
+    ): number {
+        const text = editor.backend.getLine(line);
+        const context = this.canvas.getContext('2d');
+        if (!context) return 0;
+        const style = getComputedStyle(lineElement);
+        context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+
+        const target = clientX - lineElement.getBoundingClientRect().left;
+        let low = 0;
+        let high = text.length;
+        while (low < high) {
+            const mid = Math.ceil((low + high) / 2);
+            if (context.measureText(text.slice(0, mid)).width <= target) low = mid;
+            else high = mid - 1;
+        }
+        return low;
     }
 
     private normalizedSelection(selection: Selection): { start: Position; end: Position } {

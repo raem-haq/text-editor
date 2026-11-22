@@ -60,7 +60,6 @@ textBox.addEventListener('paste', (event) => {
     });
 });
 
-/*
 textBox.addEventListener('mousedown', (event) => {
     const position = renderer.positionFromMouse(event);
     if (position === null) return;
@@ -68,4 +67,3 @@ textBox.addEventListener('mousedown', (event) => {
     textBox.focus();
     renderer.render(editor, editor.setCursor(position));
 });
-*/
