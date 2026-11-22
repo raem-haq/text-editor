@@ -1,94 +1,170 @@
-import type { TextEditorState, LineSplice, Selection } from '../core/types.js';
+import type { Editor } from '../editor/editor.js';
+import type { DocumentChange } from '../editor/types.js';
+import type { Position, Selection } from '../model/types.js';
 
-function addCursor(line: HTMLDivElement, cursorPos: number) {
-    const textNode =
-        line.firstChild instanceof Text ? line.firstChild : document.createTextNode('');
-    if (!(line.firstChild instanceof Text)) {
-        line.appendChild(textNode);
-    }
+export class DOMRenderer {
+    private decoratedLines = new Set<number>();
 
-    // cursorPos is the number of characters before the cursor.
-    // splitText returns the text node that begins at the cursor boundary.
-    const afterNode = textNode.splitText(cursorPos);
+    constructor(
+        private readonly textBox: HTMLDivElement,
+        private readonly placeholder: HTMLDivElement,
+    ) {}
 
-    const cursor = document.createElement('span');
-    cursor.className = 'cursor';
+    render(editor: Editor, change?: DocumentChange): void {
+        this.textBox.classList.toggle('is-empty', editor.backend.length === 0); // currently doesn't do anything
+        this.placeholder.hidden = editor.backend.length !== 0;
 
-    line.insertBefore(cursor, afterNode);
-    return cursor;
-}
-
-function addSelectionToLine(lineElem: Element, startI: number, endI?: number) {
-    const highlighted: HTMLSpanElement = document.createElement('span');
-    highlighted.className = 'selection';
-    const lineText: string = lineElem.textContent;
-    const end: number = endI ?? lineText.length;
-    // remember cursor index is after char
-    // and slice does not include end index
-    const beforeSelection = lineText.slice(0, startI);
-    let selectedText: string = lineText.slice(startI, end);
-    const afterSelection = lineText.slice(end);
-    lineElem!.textContent = beforeSelection;
-    if (selectedText === '') {
-        selectedText = ' ';
-    }
-    highlighted.textContent = selectedText;
-    lineElem!.appendChild(highlighted);
-    lineElem.append(afterSelection);
-}
-
-function addSelection(lineElems: HTMLCollection, selection: Selection | null) {
-    if (selection === null) return;
-    let { anchor: start, focus: end } = selection;
-
-    if (start.line > end.line || (start.line == end.line && start.offset > end.offset)) {
-        [start, end] = [end, start];
-    }
-    if (start.line == end.line) {
-        addSelectionToLine(lineElems[start.line]!, start.offset, end.offset);
-    } else {
-        addSelectionToLine(lineElems[start.line]!, start.offset);
-        for (let i = start.line + 1; i < end.line; i++) {
-            addSelectionToLine(lineElems[i]!, 0);
+        const linesToRender = new Set<number>();
+        if (change === undefined) {
+            this.textBox.replaceChildren();
+            for (let line = 0; line < editor.backend.lineCount; line++) {
+                this.textBox.append(this.createLine());
+                linesToRender.add(line);
+            }
+        } else {
+            this.spliceLines(change);
+            const lineDelta = change.insertLineCount - change.removeLineCount;
+            for (const line of this.decoratedLines) {
+                if (line <= change.startLine) {
+                    linesToRender.add(line);
+                } else if (line > change.startLine + change.removeLineCount) {
+                    linesToRender.add(line + lineDelta);
+                } // else the line was removed, so don't render it
+            }
+            for (let line = change.startLine; line <= change.endLine; line++) {
+                linesToRender.add(line);
+            }
         }
-        addSelectionToLine(lineElems[end.line]!, 0, end.offset);
-    }
-}
 
-function performLineSplice(change: LineSplice) {
-    const { startLine, removeNo, insertNo } = change;
-    const textBox = document.getElementById('text-box')!;
-    const linesDOM: HTMLCollection = textBox.children;
-    const startDiv = linesDOM.item(startLine);
-    if (startDiv === null) throw new Error('LineSplice startLine is out of range');
-    let currLine: Element = startDiv;
+        const cursor = editor.cursor;
+        const selection = editor.getSelection();
+        const nextDecoratedLines = this.getDecoratedLines(cursor, selection);
+        for (const line of nextDecoratedLines) linesToRender.add(line);
 
-    for (let i = 0; i < removeNo; i++) {
-        const nextLine: Element | null = currLine.nextElementSibling;
-        if (nextLine === null) throw new Error('LineSplice incorrect');
-        nextLine.remove();
+        for (const line of linesToRender) {
+            if (line < 0 || line >= editor.backend.lineCount) continue;
+            this.renderLine(editor, line, cursor, selection);
+        }
+
+        this.decoratedLines = nextDecoratedLines;
     }
 
-    for (let i = 0; i < insertNo; i++) {
-        const newLine = document.createElement('div');
-        textBox.insertBefore(newLine, currLine.nextElementSibling);
-        currLine = newLine;
+    private createLine(): HTMLDivElement {
+        return document.createElement('div');
     }
-}
 
-function replaceDOMLines(state: TextEditorState, change: LineSplice) {
-    const { startLine, endLine } = change;
-    const linesDOM: HTMLCollection = document.getElementById('text-box')!.children;
-    for (let i = startLine; i <= endLine; i++) {
-        linesDOM.item(i)!.textContent = state.lines[i]!;
+    private spliceLines(change: DocumentChange): void {
+        const { startLine, removeLineCount, insertLineCount } = change;
+        const lineCount = this.textBox.children.length;
+        const retainedLine = this.textBox.children.item(startLine);
+        if (!retainedLine)
+            throw new RangeError('Line change starts outside the rendered document.');
+        if (
+            startLine < 0 ||
+            removeLineCount < 0 ||
+            insertLineCount < 0 ||
+            (removeLineCount > 0 && startLine + removeLineCount >= lineCount)
+        ) {
+            throw new RangeError('Line change contains invalid splice counts.');
+        }
+
+        for (let i = 0; i < removeLineCount; i++) {
+            const nextLine = retainedLine.nextElementSibling;
+            if (!nextLine)
+                throw new RangeError('Line change removes beyond the rendered document.');
+            nextLine.remove();
+        }
+
+        let lastInserted = retainedLine;
+        for (let i = 0; i < insertLineCount; i++) {
+            const line = this.createLine();
+            this.textBox.insertBefore(line, lastInserted.nextElementSibling);
+            lastInserted = line;
+        }
     }
-    addCursor(linesDOM[state.cursor.line]! as HTMLDivElement, state.cursor.offset);
-    addSelection(linesDOM, state.selection);
-}
 
-export function renderDOMchange(state: TextEditorState, change: LineSplice | null, placeholder: HTMLDivElement): void {
-    placeholder.hidden = !(state.lines.length === 1 && state.lines[0] === '');
-    if (change === null) return;
-    performLineSplice(change);
-    replaceDOMLines(state, change);
+    private getDecoratedLines(cursor: Position, selection: Selection | null): Set<number> {
+        const lines = new Set<number>([cursor.line]);
+        if (selection !== null) {
+            const { start, end } = this.normalizedSelection(selection);
+            for (let line = start.line; line <= end.line; line++) lines.add(line);
+        }
+        return lines;
+    }
+
+    private renderLine(
+        editor: Editor,
+        line: number,
+        cursor: Position,
+        selection: Selection | null,
+    ): void {
+        const element = this.textBox.children.item(line);
+        if (!(element instanceof HTMLDivElement)) return;
+
+        const text = editor.backend.getLine(line);
+        let selectedStart: number | null = null;
+        let selectedEnd: number | null = null;
+
+        if (selection !== null) {
+            const normalized = this.normalizedSelection(selection);
+            if (line >= normalized.start.line && line <= normalized.end.line) {
+                selectedStart = line === normalized.start.line ? normalized.start.column : 0;
+                selectedEnd = line === normalized.end.line ? normalized.end.column : text.length;
+            }
+        }
+
+        const cursorColumn =
+            cursor.line === line ? Math.max(0, Math.min(cursor.column, text.length)) : null;
+        element.replaceChildren();
+
+        const appendText = (start: number, end: number, selected = false): void => {
+            const contents = text.slice(start, end);
+            if (contents.length === 0) return;
+            if (selected) {
+                const selectionElement = document.createElement('span');
+                selectionElement.className = 'selection';
+                selectionElement.textContent = contents;
+                element.append(selectionElement);
+            } else {
+                element.append(document.createTextNode(contents));
+            }
+        };
+        const appendCursor = (): void => {
+            const cursorElement = document.createElement('span');
+            cursorElement.className = 'cursor';
+            element.append(cursorElement);
+        };
+
+        if (selectedStart === null || selectedEnd === null) {
+            if (cursorColumn === null) {
+                appendText(0, text.length);
+            } else {
+                appendText(0, cursorColumn);
+                appendCursor();
+                appendText(cursorColumn, text.length);
+            }
+        } else {
+            appendText(0, selectedStart);
+            // The editor keeps its cursor at the selection focus, which is one of its edges.
+            const cursorAtStart = cursorColumn === selectedStart;
+            const cursorAtEnd = !cursorAtStart && cursorColumn === selectedEnd; // added !cursorAtStart to avoid double cursor when selection is empty
+            if (cursorAtStart) appendCursor();
+            appendText(selectedStart, selectedEnd, true);
+            if (selectedStart === selectedEnd) {
+                const selectionElement = document.createElement('span');
+                selectionElement.className = 'selection';
+                selectionElement.textContent = ' ';
+                element.append(selectionElement);
+            }
+            if (cursorAtEnd) appendCursor();
+            appendText(selectedEnd, text.length);
+        }
+    }
+
+    private normalizedSelection(selection: Selection): { start: Position; end: Position } {
+        const { anchor, focus } = selection;
+        const comparison =
+            anchor.line === focus.line ? anchor.column - focus.column : anchor.line - focus.line;
+        return comparison <= 0 ? { start: anchor, end: focus } : { start: focus, end: anchor };
+    }
 }

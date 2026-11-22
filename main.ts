@@ -12,7 +12,7 @@ const history = new EditorHistory();
 
 const textBox = document.querySelector<HTMLDivElement>('#text-box')!;
 const placeholder = document.querySelector<HTMLDivElement>('#placeholder')!;
-placeholder.textContent = 'Click to edit here';
+placeholder.textContent = 'Type to edit here';
 
 const renderer = new DOMRenderer(textBox, placeholder);
 renderer.render(editor);
@@ -60,6 +60,7 @@ textBox.addEventListener('paste', (event) => {
     });
 });
 
+/*
 textBox.addEventListener('mousedown', (event) => {
     const position = renderer.positionFromMouse(event);
     if (position === null) return;
@@ -67,3 +68,4 @@ textBox.addEventListener('mousedown', (event) => {
     textBox.focus();
     renderer.render(editor, editor.setCursor(position));
 });
+*/
